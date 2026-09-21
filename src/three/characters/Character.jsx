@@ -30,6 +30,7 @@ const MODEL_CORRECTIONS = {
 // an actual action (sitting, checking a phone, waving) instead of the
 // same idle sway for every socializing agent.
 const BUBBLE_POSE = { "💺": "sit", "📱": "phone", "👋": "wave", "👀": "look", "🙆": "stretch", "🔧": "inspect" };
+const BUSY_STATUSES = new Set(["assigned", "walking_to_work", "working", "waiting", "handoff"]);
 
 function stableAvoidanceDirection(agentId) {
   const ids = [...agentMotion.keys()].sort();
@@ -77,6 +78,15 @@ function ShortAgentLabel({ cfg, status, statusColor, isExpanded }) {
       <span className="agent-label-icon">{cfg.emoji}</span>
       <span>{cfg.name.replace(" Agent", "")}</span>
       <i style={{ background: statusColor }} />
+    </div>
+  );
+}
+
+function WorkingLoader({ cfg, status }) {
+  return (
+    <div className="agent-working-loader" aria-label={`${cfg.name} is ${status === "waiting" ? "waiting" : "working"}`}>
+      <span className="agent-working-ring" style={{ borderTopColor: cfg.c1, borderRightColor: cfg.c1 }} />
+      <span className="agent-working-dot" style={{ background: cfg.c1 }} />
     </div>
   );
 }
@@ -287,6 +297,7 @@ export default function Character({ cfg }) {
   // the task lifecycle (AgentRuntime) has actually put them in "working" at
   // a work location flagged hideWhileWorking. No independent fake timer.
   const hideAtWork = status === "working" && !!WORK_INTERACTIONS[cfg.id]?.hideWhileWorking;
+  const showWorkingLoader = BUSY_STATUSES.has(status);
 
   useFrame((_, delta) => {
     const motion = getMotion(cfg.id);
@@ -294,7 +305,10 @@ export default function Character({ cfg }) {
     clock.current += delta;
 
     hiddenAtWorkScale.current = THREE.MathUtils.lerp(hiddenAtWorkScale.current, hideAtWork ? 0 : 1, 0.12);
-    group.current.scale.setScalar(WORLD_SCALE.agent * Math.max(hiddenAtWorkScale.current, 0.001));
+    group.current.scale.setScalar(WORLD_SCALE.agent);
+    if (bodyWrap.current) {
+      bodyWrap.current.scale.setScalar(Math.max(hiddenAtWorkScale.current, 0.001));
+    }
 
     // Position — read straight from the shared motion map every frame.
     // No React state involved, so this never triggers a re-render.
@@ -497,6 +511,11 @@ export default function Character({ cfg }) {
           </Suspense>
         </ModelErrorBoundary>
       </group>
+      {showWorkingLoader && (
+        <Html position={[0, TARGET_CHARACTER_HEIGHT + 0.56, 0]} center zIndexRange={[20, 0]} occlude={false}>
+          <WorkingLoader cfg={cfg} status={status} />
+        </Html>
+      )}
     </group>
   );
 }

@@ -1,5 +1,9 @@
 import { proxyAriaRequest } from "../server/ariaProxy.js";
 
+export const config = {
+  maxDuration: 60,
+};
+
 const JSON_HEADERS = {
   "Content-Type": "application/json",
   "Access-Control-Allow-Origin": "*",

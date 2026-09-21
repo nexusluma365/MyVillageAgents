@@ -1,5 +1,4 @@
 const ARIA_WEBHOOK_URL = "https://nexusluma.app.n8n.cloud/webhook/aria-router";
-const DEFAULT_TIMEOUT_MS = 55000;
 
 export async function proxyAriaRequest(payload, options = {}) {
   const message = String(payload?.message || payload?.request || "").trim();
@@ -10,15 +9,16 @@ export async function proxyAriaRequest(payload, options = {}) {
     };
   }
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), options.timeoutMs || DEFAULT_TIMEOUT_MS);
+  const timeoutMs = Number(options.timeoutMs || 0);
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  const timeout = controller ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
     const response = await fetch(ARIA_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
-      signal: controller.signal,
+      signal: controller?.signal,
     });
     const text = await response.text();
     const body = parseBody(text);
@@ -56,7 +56,7 @@ export async function proxyAriaRequest(payload, options = {}) {
       },
     };
   } finally {
-    clearTimeout(timeout);
+    if (timeout) clearTimeout(timeout);
   }
 }
 

@@ -1,7 +1,7 @@
 const ARIA_TASK_ID = "process_rental_qualification";
 const ARIA_ROUTE_TASK_ID = "aria_route_request";
 const DEFAULT_ARIA_ROUTER_URL = "/api/aria-router";
-const DEFAULT_TIMEOUT_MS = 60000;
+const DEFAULT_TIMEOUT_MS = 180000;
 
 export class RealAriaProvider {
   constructor(bus, options = {}) {
@@ -262,7 +262,7 @@ async function postAriaHandoff(endpoint, payload, timeoutMs) {
       signal: controller.signal,
     });
     const text = await response.text();
-    const body = parseJsonBody(text);
+    const body = parseJsonBody(text, { strict: response.ok });
 
     if (!response.ok) {
       const message = safeMessageFromBody(body) || httpStatusMessage(response.status);
@@ -280,11 +280,12 @@ async function postAriaHandoff(endpoint, payload, timeoutMs) {
   }
 }
 
-function parseJsonBody(text) {
+function parseJsonBody(text, options = {}) {
   if (!text) return {};
   try {
     return JSON.parse(text);
   } catch {
+    if (!options.strict) return {};
     throw new AriaProviderError("Aria returned a response the Village could not read.", 0, "invalid_json");
   }
 }
@@ -342,6 +343,7 @@ function httpStatusMessage(status) {
   if (status === 400) return "ARIA could not process that request.";
   if (status === 401 || status === 403) return "ARIA is not authorized to access that service.";
   if (status === 404) return "ARIA could not find that service.";
+  if (status === 504) return "ARIA is still waiting on the backend, but the host ended the request.";
   if (status >= 500) return "The ARIA service had a server error.";
   return "ARIA could not finish this request.";
 }
