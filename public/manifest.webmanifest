@@ -1,0 +1,18 @@
+{
+  "name": "RentReady AI Agent Village",
+  "short_name": "RentReady Village",
+  "description": "Private RentReady AI Agent Village command center.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbedcd",
+  "theme_color": "#7a4d28",
+  "icons": [
+    {
+      "src": "/icons/village-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

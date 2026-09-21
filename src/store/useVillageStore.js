@@ -14,12 +14,16 @@ import {
 } from "../domain/ariaRouter.js";
 import { createMotion } from "./motion.js";
 import { AgentRuntime } from "./AgentRuntime.js";
+import { playNewSaleSound } from "../domain/soundSystem.js";
+import { showBusinessNotification } from "../domain/notificationSystem.js";
 
 const bus = new EventBus();
 const provider = new AgentProviderRouter(bus);
 const runtimes = {};
 let toastSeq = 1;
 let agentsInitialized = false;
+const BUSINESS_EVENT_DEDUPE_KEY = "rentready_business_event_ids_v1";
+const handledBusinessEventIds = loadHandledBusinessEventIds();
 
 const initialAgents = {};
 AGENTS_CONFIG.forEach((cfg) => {
@@ -38,9 +42,10 @@ export const useVillageStore = create((set, get) => ({
   pendingApprovals: [],
   specialistStatus: {},
   toasts: [],
-  agentAlert: { open: false, agentId: null, type: null, message: "" },
+  agentAlert: { open: false, agentId: null, type: null, message: "", task: null },
   buildingGlow: {},
   beams: [],
+  providerHealth: "connected",
   providerLabel: "Aria Router — Real Backends",
 
   // ---- bootstrap ----
@@ -74,15 +79,71 @@ export const useVillageStore = create((set, get) => ({
       set((s) => ({ toasts: s.toasts.filter((t) => t.id !== toastId) }));
     }, 3600);
   },
-  openAgentAlert: (agentId, type, message, priority = "normal") => set({ agentAlert: { open: true, agentId, type, message, priority } }),
-  closeAgentAlert: () => set({ agentAlert: { open: false, agentId: null, type: null, message: "" } }),
+  openAgentAlert: (agentId, type, message, priority = "normal", task = null) => set({ agentAlert: { open: true, agentId, type, message, priority, task } }),
+  closeAgentAlert: () => set({ agentAlert: { open: false, agentId: null, type: null, message: "", task: null } }),
+  setProviderHealth: (providerHealth) => set({
+    providerHealth,
+    providerLabel: providerHealth === "offline"
+      ? "Aria Router — Offline"
+      : providerHealth === "working"
+        ? "Aria Router — Working"
+        : providerHealth === "degraded"
+          ? "Aria Router — Degraded"
+          : "Aria Router — Real Backends",
+  }),
   addHistory: (record) => { HistoryStore.add(record); },
+  receiveBusinessEvent: (eventPayload) => {
+    const event = normalizeBusinessEvent(eventPayload);
+    if (!event) return false;
+    if (event.eventId) {
+      if (handledBusinessEventIds.has(event.eventId)) return false;
+      rememberBusinessEventId(event.eventId);
+    }
+
+    const record = {
+      id: event.eventId ? `business-${event.eventId}` : `business-${event.event}-${Date.now()}`,
+      agentId: ARIA_AGENT_ID,
+      agentName: "Aria",
+      emoji: "📊",
+      title: event.event === "new_sale" ? "New Sale" : "New Lead",
+      status: "completed",
+      result: event.message,
+      error: null,
+      completedAt: event.timestamp ? Date.parse(event.timestamp) || Date.now() : Date.now(),
+      sourceAgentId: ARIA_AGENT_ID,
+      event,
+    };
+    HistoryStore.add(record);
+    get().setAgentBubble(ARIA_AGENT_ID, event.event === "new_sale" ? "💰" : "!");
+    get().openAgentAlert(ARIA_AGENT_ID, "update", event.message, event.event);
+    get().pushToast(event.message, event.event === "new_sale" ? "completed" : "assigned");
+    get().openActivityPanel();
+    get().setActivityTab("completed");
+    if (event.event === "new_sale") {
+      playNewSaleSound();
+    }
+    if (!event.suppressNotification) {
+      showBusinessNotification(event).catch((error) => {
+        console.warn("[businessEvent] Browser notification could not be shown.", error);
+      });
+    }
+    setTimeout(() => {
+      get().setAgentBubble(ARIA_AGENT_ID, "");
+    }, 3600);
+    return true;
+  },
 
   // ---- SECTION 8 — ARIA ROUTER / ORCHESTRATOR ----
   assignTaskToAgent: (agentId, taskId, params) => {
     if (!isAria(agentId)) {
       get().pushToast("Talk to Aria. Specialists only show private status.", "assigned");
       get().onAgentClicked(agentId);
+      return;
+    }
+    if (get().agents[agentId]?.currentTask) {
+      get().pushToast("Aria is currently working. Please wait for this request to finish.", "assigned");
+      get().openActivityPanel();
+      get().setActivityTab("active");
       return;
     }
     const runtime = runtimes[agentId];
@@ -92,7 +153,18 @@ export const useVillageStore = create((set, get) => ({
       ? { ...params, context: buildAgentContextSnapshot(get().agents, get().specialistStatus) }
       : params;
     runtime.assign(taskDef, runParams);
+    get().setProviderHealth("working");
     get().pushToast("Request sent to Aria.", "assigned");
+  },
+  retryTask: (task) => {
+    if (!task?.agentId || !task?.type) return;
+    if (get().agents[task.agentId]?.currentTask) {
+      get().pushToast("Aria is currently working. Please wait before retrying.", "assigned");
+      return;
+    }
+    const params = task.parameters || {};
+    get().closeAgentAlert();
+    get().assignTaskToAgent(task.agentId, task.type, params);
   },
   // Visual handoff cue: a brief traveling light from Aria's building
   // to the delegate's building whenever work gets handed off between agents.
@@ -142,6 +214,9 @@ export const useVillageStore = create((set, get) => ({
 
   recordTaskOutcome: (agentId, cfg, task, success) => {
     const sanitized = sanitizeTaskForSpecialistPanel({ ...task, agentId });
+    if (isAria(agentId)) {
+      get().setProviderHealth(success ? "connected" : "degraded");
+    }
     if (isSpecialist(agentId)) {
       set((s) => ({
         specialistStatus: {
@@ -265,6 +340,40 @@ export const useVillageStore = create((set, get) => ({
   closeActivityPanel: () => set((s) => ({ activityPanel: { ...s.activityPanel, open: false } })),
   setActivityTab: (tab) => set((s) => ({ activityPanel: { ...s.activityPanel, tab } })),
 }));
+
+function loadHandledBusinessEventIds() {
+  try {
+    const raw = localStorage.getItem(BUSINESS_EVENT_DEDUPE_KEY);
+    const ids = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id) => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function rememberBusinessEventId(eventId) {
+  handledBusinessEventIds.add(eventId);
+  try {
+    localStorage.setItem(BUSINESS_EVENT_DEDUPE_KEY, JSON.stringify([...handledBusinessEventIds].slice(-100)));
+  } catch {}
+}
+
+function normalizeBusinessEvent(payload) {
+  if (!payload || typeof payload !== "object") return null;
+  const eventName = String(payload.event || "").trim().toLowerCase();
+  if (eventName !== "new_lead" && eventName !== "new_sale") return null;
+  const fallback = eventName === "new_sale"
+    ? "Congratulations Boss! You have a new sale!"
+    : "Hey Boss, a new lead just came in.";
+  return {
+    ...payload,
+    event: eventName,
+    eventId: typeof payload.eventId === "string" && payload.eventId.trim() ? payload.eventId.trim() : null,
+    message: typeof payload.message === "string" && payload.message.trim() ? payload.message.trim() : fallback,
+    timestamp: typeof payload.timestamp === "string" ? payload.timestamp : null,
+    suppressNotification: payload.suppressNotification === true,
+  };
+}
 
 function upsertApproval(list, approval) {
   const idx = list.findIndex((item) => item.id === approval.id);

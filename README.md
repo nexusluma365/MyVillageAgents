@@ -51,6 +51,29 @@ server so the browser does not hit n8n CORS limits.
 - **No live website change runs without approval.** Approving posts the
   approval payload to the configured execution endpoint.
 
+## Business event notifications
+
+The frontend can now accept backend-originated business events and present them
+as ARIA notifications in the Activity system:
+
+```json
+{ "eventId": "unique-id", "event": "new_lead", "message": "Hey Boss, a new lead just came in.", "timestamp": "..." }
+```
+
+```json
+{ "eventId": "unique-id", "event": "new_sale", "message": "Congratulations Boss! You have a new sale!", "amount": 10, "timestamp": "..." }
+```
+
+`eventId` is optional, but when provided the frontend uses it to prevent
+duplicate Activity entries and duplicate sale-sound playback. Sale events try
+to play `/sounds/new-sale.mp3` once. Add an original, licensed audio file at
+`public/sounds/new-sale.mp3`; missing or browser-blocked audio fails quietly.
+
+This is only the safe frontend foundation for push. A real push backend still
+needs to create browser Push subscriptions and deliver authenticated Web Push
+payloads from n8n/server-side code. No private keys or payment credentials are
+stored in browser JavaScript.
+
 ## Backend connection status
 
 Fully connected in this repo:

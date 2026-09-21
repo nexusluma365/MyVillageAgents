@@ -90,7 +90,7 @@ export const STAGE_LABELS = ["Assigned", "Preparing", "Working", "Reviewing", "C
 export const STATUS_COLORS = {
   idle: "#8bd17f", wandering: "#9fcf72", walking: "#f2c94c", walking_to_work: "#f2c94c", returning: "#c9b57b",
   assigned: "#f2994a", handoff: "#b894ff", working: "#4ea8de", waiting: "#dba13b", success: "#2fa66b",
-  completed: "#2fa66b", error: "#d1494a", socializing: "#8bd17f",
+  completed: "#2fa66b", timed_out: "#dba13b", error: "#d1494a", socializing: "#8bd17f",
 };
 
 export function statusLabel(status) {
@@ -98,7 +98,7 @@ export function statusLabel(status) {
     idle: "Ready for work", wandering: "Exploring the village", walking: "On the move",
     walking_to_work: "Walking to workstation", returning: "Returning to post", socializing: "Socializing",
     assigned: "Task assigned", handoff: "Handing off work", working: "Working", waiting: "Waiting for input",
-    success: "Success", completed: "Just finished", error: "Needs attention",
+    success: "Success", completed: "Just finished", timed_out: "Taking longer than expected", error: "Needs attention",
   };
   return map[status] || status;
 }

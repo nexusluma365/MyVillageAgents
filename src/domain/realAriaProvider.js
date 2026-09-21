@@ -1,3 +1,5 @@
+import { normalizeAriaResponse, normalizeAriaTransportError } from "./ariaResponseNormalizer.js";
+
 const ARIA_TASK_ID = "process_rental_qualification";
 const ARIA_ROUTE_TASK_ID = "aria_route_request";
 const DEFAULT_ARIA_ROUTER_URL = "/api/aria-router";
@@ -20,17 +22,25 @@ export class RealAriaProvider {
         specialist: params.specialist || "auto",
         context: params.context || null,
       };
+    const requestId = createRequestId();
+    const userMessage = taskDef.id === ARIA_TASK_ID ? String(parameters.leadId || "") : String(parameters.request || "");
     const task = {
       id: "aria-" + this._taskSeq++,
+      requestId,
       agentId: agent.id,
       type: taskDef.id,
       title: taskDef.label,
       parameters,
+      userMessage,
+      route: parameters.specialist || "aria",
       status: "queued",
+      requestState: "idle",
       stage: "Assigned",
       createdAt: Date.now(),
       startedAt: null,
+      startedPerf: null,
       completedAt: null,
+      elapsedMs: null,
       result: null,
       resultMeta: null,
       error: null,
@@ -50,38 +60,50 @@ export class RealAriaProvider {
 
       validateAriaTask(task, this.endpoint);
       task.status = "processing";
+      task.requestState = "sending";
       task.stage = "Preparing";
       task.startedAt = Date.now();
+      task.startedPerf = performance.now();
       this.bus.emit("task.started", { agentId: task.agentId, task: { ...task } });
 
       task.stage = "Working";
+      task.requestState = "working";
       this.bus.emit("task.progress", {
         agentId: task.agentId,
         task: { ...task, result: "Reviewing renter qualification information." },
       });
 
-      const response = await postAriaHandoff(this.endpoint, { leadId: task.parameters.leadId }, this.timeoutMs);
-      const normalized = normalizeAriaResponse(response, task.parameters.leadId);
+      const response = await postAriaHandoff(this.endpoint, { leadId: task.parameters.leadId, requestId: task.requestId }, this.timeoutMs);
+      const normalized = normalizeAriaResponse(response, { leadId: task.parameters.leadId });
 
       if (!normalized.success) {
         throw new AriaProviderError(normalized.error || "Aria could not process this rental qualification.", normalized.statusCode);
       }
 
       task.status = "completed";
+      task.requestState = "completed";
       task.stage = "Complete";
       task.completedAt = Date.now();
-      task.result = normalized.summary || "Rental qualification processing is complete.";
+      task.elapsedMs = elapsedSince(task.startedPerf);
+      task.result = normalized.message || "Rental qualification processing is complete.";
       task.resultMeta = {
         leadId: normalized.leadId,
         status: normalized.status,
         taskId: normalized.taskId,
+        normalizedResponse: normalized,
+        requestId: task.requestId,
+        userMessage: task.userMessage,
+        route: task.route,
+        elapsedMs: task.elapsedMs,
       };
       this.bus.emit("task.completed", { agentId: task.agentId, task: { ...task } });
     } catch (error) {
       const clean = normalizeAriaError(error);
-      task.status = "failed";
-      task.stage = "Error";
+      task.status = clean.code === "long_running" || clean.code === "timeout" ? "timed_out" : "failed";
+      task.requestState = task.status;
+      task.stage = clean.code === "long_running" || clean.code === "timeout" ? "Working" : "Error";
       task.completedAt = Date.now();
+      task.elapsedMs = elapsedSince(task.startedPerf, task.startedAt, task.completedAt);
       task.error = clean.message;
       task.errorMeta = { statusCode: clean.statusCode, code: clean.code };
       console.error("[RealAriaProvider]", error);
@@ -92,11 +114,14 @@ export class RealAriaProvider {
   async runRouterTask(task) {
     validateAriaRouterTask(task, this.routerEndpoint);
     task.status = "processing";
+    task.requestState = "sending";
     task.stage = "Preparing";
     task.startedAt = Date.now();
+    task.startedPerf = performance.now();
     this.bus.emit("task.started", { agentId: task.agentId, task: { ...task } });
 
     task.stage = "Working";
+    task.requestState = "working";
     this.bus.emit("task.progress", {
       agentId: task.agentId,
       task: { ...task, result: "ARIA is thinking..." },
@@ -104,31 +129,56 @@ export class RealAriaProvider {
 
     const response = await postAriaHandoff(this.routerEndpoint, {
       message: buildAriaMessage(task.parameters.request || "", task.parameters.specialist || "auto"),
+      requestId: task.requestId,
     }, this.timeoutMs);
-    const body = response.body || {};
-    if (body.success === false || body.status === "error" || body.status === "failed") {
-      throw new AriaProviderError(safeMessageFromBody(body) || "ARIA could not finish that request.", response.statusCode, "router_error");
+    task.requestState = "processing";
+    this.bus.emit("task.progress", {
+      agentId: task.agentId,
+      task: { ...task, result: "ARIA is putting everything together..." },
+    });
+
+    const normalized = normalizeAriaResponse(response);
+    if (import.meta.env.DEV) {
+      console.debug("[RealAriaProvider] normalized ARIA response", {
+        requestId: task.requestId,
+        statusCode: response.statusCode,
+        elapsedMs: elapsedSince(task.startedPerf, task.startedAt),
+        normalizationPath: normalized.debug?.paths,
+        parseErrors: normalized.debug?.parseErrors,
+      });
     }
-    const formatted = formatAriaRouterResponse(body);
-    const requiresApproval = normalizeRequiresApproval(body.requiresApproval);
+
+    if (!normalized.success) {
+      throw new AriaProviderError(normalized.error || "I finished the job, but I had trouble reading the result.", response.statusCode, "invalid_response");
+    }
+    const body = normalized.raw || {};
+    const formatted = normalized.message;
+    const requiresApproval = normalized.requiresApproval;
 
     task.status = "completed";
+    task.requestState = requiresApproval ? "needs_approval" : "completed";
     task.stage = "Complete";
     task.completedAt = Date.now();
+    task.elapsedMs = elapsedSince(task.startedPerf);
     task.result = formatted;
     task.resultMeta = {
       raw: body,
-      status: firstString(body.status, "completed"),
+      normalizedResponse: normalized,
+      status: normalized.status,
       publicSummary: formatted,
-      agentsInvolved: normalizeAgentsInvolved(body.agentsInvolved, body.agent),
+      agentsInvolved: normalized.agentsInvolved,
       requiresApproval,
-      needsAttention: normalizeList(body.needsAttention),
-      recommendations: normalizeList(body.recommendations),
-      findings: normalizeList(body.findings),
-      approvalQuestion: buildApprovalQuestion(body, formatted),
-      proposedChange: firstString(body.proposedChange, body.change, body.action),
-      executionEndpoint: firstString(body.executionEndpoint),
-      changePayload: body.changePayload || body.payload || null,
+      needsAttention: normalized.needsAttention,
+      recommendations: normalized.recommendations,
+      findings: normalized.findings,
+      approvalQuestion: buildApprovalQuestion(normalized, formatted),
+      proposedChange: normalized.proposedChange,
+      executionEndpoint: normalized.executionEndpoint,
+      changePayload: normalized.changePayload,
+      requestId: task.requestId,
+      userMessage: task.userMessage,
+      route: task.route,
+      elapsedMs: task.elapsedMs,
     };
     this.bus.emit("task.completed", { agentId: task.agentId, task: { ...task } });
   }
@@ -186,63 +236,6 @@ function normalizeSpecialistHint(specialist) {
   return map[key] || key.toUpperCase();
 }
 
-function formatAriaRouterResponse(body = {}) {
-  const message = firstString(body.message);
-  if (message) return message;
-
-  console.warn("[RealAriaProvider] ARIA response did not include a message field.", body);
-  const fallback = firstString(body.summary, body.reply, body.result?.message, body.result?.summary);
-  if (fallback) return fallback;
-
-  return "ARIA finished the task, but no message was returned.";
-}
-
-function normalizeRequiresApproval(value) {
-  if (value === true) return true;
-  if (typeof value === "string") {
-    return value.trim().toLowerCase() === "true";
-  }
-  return false;
-}
-
-function normalizeAgentsInvolved(agentsInvolved, agent) {
-  const items = Array.isArray(agentsInvolved) ? [...agentsInvolved] : [];
-  if (agent) items.push(agent);
-  const map = {
-    aria: "data",
-    data: "data",
-    sage: "research",
-    research: "research",
-    conversion: "research",
-    milo: "content",
-    content: "content",
-    marketing: "content",
-    forge: "automation",
-    automation: "automation",
-    developer: "automation",
-    atlas: "manager",
-    manager: "manager",
-    operations: "manager",
-  };
-  return [...new Set(items
-    .map((item) => map[String(item || "").trim().toLowerCase()])
-    .filter(Boolean))];
-}
-
-function normalizeList(value) {
-  if (!value) return [];
-  const items = Array.isArray(value) ? value : [value];
-  return items
-    .map((item) => {
-      if (typeof item === "string") return item.trim();
-      if (typeof item?.message === "string") return item.message.trim();
-      if (typeof item?.summary === "string") return item.summary.trim();
-      if (typeof item?.text === "string") return item.text.trim();
-      return "";
-    })
-    .filter(Boolean);
-}
-
 function buildApprovalQuestion(body = {}, fallback = "") {
   return firstString(
     body.approvalQuestion,
@@ -269,13 +262,13 @@ async function postAriaHandoff(endpoint, payload, timeoutMs) {
 
     if (!response.ok) {
       const message = safeMessageFromBody(body) || httpStatusMessage(response.status);
-      throw new AriaProviderError(message, response.status, "http_error");
+      throw new AriaProviderError(message, response.status, response.status === 524 ? "long_running" : "http_error");
     }
 
     return { statusCode: response.status, body };
   } catch (error) {
     if (error.name === "AbortError") {
-      throw new AriaProviderError("ARIA took too long to answer.", 0, "timeout");
+      throw new AriaProviderError("This job is taking longer than expected.", 0, "timeout");
     }
     throw error;
   } finally {
@@ -293,41 +286,20 @@ function parseJsonBody(text, options = {}) {
   }
 }
 
-export function normalizeAriaResponse(response, leadId) {
-  const body = response?.body ?? {};
-  const success = body.success !== false && body.status !== "error" && body.status !== "failed";
-  const summary = firstString(
-    body.summary,
-    body.message,
-    body.result?.summary,
-    body.data?.summary,
-    success ? "Rental qualification processing is complete." : "Aria could not finish this rental review."
-  );
-
-  return {
-    success,
-    taskId: firstString(body.taskId, body.task_id, body.executionId, body.id),
-    leadId: firstString(body.leadId, body.lead_id, body.data?.leadId, leadId),
-    status: firstString(body.status, body.result?.status, success ? "completed" : "failed"),
-    summary,
-    statusCode: response?.statusCode,
-    error: success ? null : summary,
-  };
-}
-
 function normalizeAriaError(error) {
   if (error instanceof AriaProviderError) {
+    const clean = normalizeAriaTransportError(error);
     return {
-      message: error.message,
+      message: clean.message,
       statusCode: error.statusCode,
-      code: error.code,
+      code: clean.code,
     };
   }
   if (error?.message === "Failed to fetch") {
-    return { message: "ARIA could not be reached from the Village.", statusCode: 0, code: "network" };
+    return { message: "I'm having trouble reaching the backend right now.", statusCode: 0, code: "network" };
   }
   return {
-    message: "ARIA could not finish this request.",
+    message: "The backend had a problem while I was working.",
     statusCode: 0,
     code: "unknown",
   };
@@ -343,12 +315,25 @@ function safeMessageFromBody(body) {
 }
 
 function httpStatusMessage(status) {
-  if (status === 400) return "ARIA could not process that request.";
-  if (status === 401 || status === 403) return "ARIA is not authorized to access that service.";
-  if (status === 404) return "ARIA could not find that service.";
-  if (status === 504) return "ARIA took longer than this host allowed. Please try again with a shorter request, or increase the Vercel function duration.";
-  if (status >= 500) return "The ARIA service had a server error.";
-  return "ARIA could not finish this request.";
+  if (status === 400) return "I could not process that request as written.";
+  if (status === 401 || status === 403) return "I do not have permission to reach that service right now.";
+  if (status === 404) return "I could not find the backend route for that request.";
+  if (status === 408 || status === 504) return "This job is taking longer than expected.";
+  if (status === 524) return "This is a bigger job. It may still be running.";
+  if (status === 429) return "The backend is busy right now. Please wait a moment before trying again.";
+  if (status >= 500) return "The backend had a problem while I was working.";
+  return "I could not finish this request.";
+}
+
+function createRequestId() {
+  if (crypto?.randomUUID) return crypto.randomUUID();
+  return `aria-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+function elapsedSince(startPerf, startedAt, completedAt) {
+  if (typeof startPerf === "number" && completedAt == null) return Math.max(0, Math.round(performance.now() - startPerf));
+  if (typeof startPerf === "number" && startedAt && completedAt) return Math.max(0, completedAt - startedAt);
+  return startedAt ? Math.max(0, completedAt - startedAt) : null;
 }
 
 class AriaProviderError extends Error {

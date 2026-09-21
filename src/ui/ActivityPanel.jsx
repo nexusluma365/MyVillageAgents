@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useVillageStore } from "../store/useVillageStore.js";
 import { HistoryStore } from "../domain/historyStore.js";
 import { STATUS_COLORS, statusLabel } from "../domain/agentsConfig.js";
+import { formatElapsed } from "../domain/ariaResponseNormalizer.js";
 
 export default function ActivityPanel() {
   const activityPanel = useVillageStore((s) => s.activityPanel);
@@ -17,7 +18,7 @@ export default function ActivityPanel() {
   // same 2s cadence the original used.
   useEffect(() => {
     if (!activityPanel.open || activityPanel.tab !== "active") return;
-    const id = setInterval(() => forceTick((n) => n + 1), 2000);
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
     return () => clearInterval(id);
   }, [activityPanel.open, activityPanel.tab]);
 
@@ -26,7 +27,7 @@ export default function ActivityPanel() {
   const activeItems = Object.values(agents).filter((a) => a.currentTask);
   const history = HistoryStore.load().slice().reverse();
   const filtered = activityPanel.tab === "errors"
-    ? history.filter((h) => h.status === "failed")
+    ? history.filter((h) => h.status === "failed" || h.status === "timed_out")
     : history.filter((h) => h.status === "completed");
 
   return (
@@ -51,7 +52,7 @@ export default function ActivityPanel() {
                 <div className="status-chip" style={{ background: STATUS_COLORS[a.status] + "22", color: STATUS_COLORS[a.status] }}>{statusLabel(a.status)}</div>
               </div>
               <div className="tasktitle">{a.currentTask.title}</div>
-              <div className="meta-line">{a.currentTask.stage}</div>
+              <div className="meta-line">{a.currentTask.stage} · {activeElapsed(a.currentTask)}</div>
             </div>
           )) : <div className="ap-empty">No active tasks. Your agents are idle right now.</div>
         ) : activityPanel.tab === "approvals" ? (
@@ -75,15 +76,15 @@ export default function ActivityPanel() {
           )) : <div className="ap-empty">No pending approvals. Live changes are locked until Aria asks you.</div>
         ) : (
           filtered.length ? filtered.slice(0, 30).map((h) => {
-            const color = h.status === "failed" ? STATUS_COLORS.error : STATUS_COLORS.completed;
+            const color = h.status === "failed" ? STATUS_COLORS.error : STATUS_COLORS[h.status] || STATUS_COLORS.completed;
             return (
               <div className="ap-item" key={h.id} onClick={() => openHistoryDetail(h)}>
                 <div className="row1">
                   <div className="agentname">{h.emoji} {h.agentName}</div>
-                  <div className="status-chip" style={{ background: color + "22", color }}>{h.status}</div>
+                  <div className="status-chip" style={{ background: color + "22", color }}>{historyStatusLabel(h.status)}</div>
                 </div>
                 <div className="tasktitle">{h.title}</div>
-                <div className="meta-line">{new Date(h.completedAt).toLocaleTimeString()}</div>
+                <div className="meta-line">{new Date(h.completedAt).toLocaleTimeString()}{h.elapsedMs != null ? ` · ${formatElapsed(h.elapsedMs)}` : ""}</div>
               </div>
             );
           }) : <div className="ap-empty">Nothing here yet.</div>
@@ -91,4 +92,17 @@ export default function ActivityPanel() {
       </div>
     </div>
   );
+}
+
+function activeElapsed(task) {
+  if (task.elapsedMs != null) return formatElapsed(task.elapsedMs);
+  if (!task.startedAt) return "Queued";
+  return formatElapsed(Date.now() - task.startedAt);
+}
+
+function historyStatusLabel(status) {
+  if (status === "timed_out") return "Taking longer";
+  if (status === "completed") return "Completed";
+  if (status === "failed") return "Failed";
+  return status;
 }

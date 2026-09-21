@@ -10,6 +10,7 @@ export const SOUND_EVENTS = {
   paper: "desk.paper",
   success: "ui.success",
   alert: "ui.alert",
+  newSale: "business.new_sale",
 };
 
 let muted = true;
@@ -24,7 +25,29 @@ export function isSoundMuted() {
 
 export function playSoundCue(cue) {
   if (muted || !cue) return false;
-  // Future implementation point: route `cue` to WebAudio/HTMLAudio once
-  // original, licensed assets exist.
+  if (cue === SOUND_EVENTS.newSale) return playAudioOnce("/sounds/new-sale.mp3");
   return false;
+}
+
+export function playNewSaleSound() {
+  return playAudioOnce("/sounds/new-sale.mp3");
+}
+
+function playAudioOnce(src) {
+  if (typeof Audio === "undefined") return false;
+  try {
+    const audio = new Audio(src);
+    audio.preload = "auto";
+    audio.volume = 0.78;
+    const playback = audio.play();
+    if (playback?.catch) {
+      playback.catch((error) => {
+        console.warn("[soundSystem] Sale sound could not play. Add /public/sounds/new-sale.mp3 and make sure the owner has interacted with the page.", error);
+      });
+    }
+    return true;
+  } catch (error) {
+    console.warn("[soundSystem] Sale sound could not start.", error);
+    return false;
+  }
 }

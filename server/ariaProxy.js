@@ -17,7 +17,7 @@ export async function proxyAriaRequest(payload, options = {}) {
     const response = await fetch(ARIA_WEBHOOK_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message }),
+      body: JSON.stringify({ message, requestId: payload?.requestId || payload?.clientRequestId || undefined }),
       signal: controller?.signal,
     });
     const text = await response.text();
@@ -51,8 +51,8 @@ export async function proxyAriaRequest(payload, options = {}) {
       body: {
         success: false,
         message: timedOut
-          ? "ARIA took too long to answer."
-          : "ARIA could not be reached from the Village.",
+          ? "This job is taking longer than expected."
+          : "I'm having trouble reaching the backend right now.",
       },
     };
   } finally {
@@ -65,7 +65,7 @@ function parseBody(text) {
   try {
     return JSON.parse(text);
   } catch {
-    return { success: false, message: "ARIA returned a response the Village could not read." };
+    return { success: false, message: "I finished the job, but I had trouble reading the result." };
   }
 }
 

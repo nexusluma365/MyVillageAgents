@@ -1,6 +1,8 @@
+import { useEffect, useState } from "react";
 import { useVillageStore } from "../store/useVillageStore.js";
 import { STAGE_LABELS, STATUS_COLORS, statusLabel } from "../domain/agentsConfig.js";
 import { isSpecialist } from "../domain/ariaRouter.js";
+import { formatElapsed } from "../domain/ariaResponseNormalizer.js";
 
 export default function DetailPanel() {
   const detailPanel = useVillageStore((s) => s.detailPanel);
@@ -45,8 +47,15 @@ export default function DetailPanel() {
 }
 
 function ProgressBody({ task, status }) {
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (task.completedAt || task.elapsedMs != null) return;
+    const id = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [task.completedAt, task.elapsedMs, task.id]);
   const curIdx = STAGE_LABELS.indexOf(task.stage);
-  const startedAgo = task.startedAt ? Math.max(0, Math.round((Date.now() - task.startedAt) / 1000)) : 0;
+  const elapsedMs = task.elapsedMs ?? (task.startedAt ? Date.now() - task.startedAt : 0);
+  const workingLine = requestStateLabel(task, elapsedMs);
   return (
     <>
       <div className="fp-status-row">
@@ -60,7 +69,10 @@ function ProgressBody({ task, status }) {
           </div>
         ))}
       </div>
-      <div className="meta-line">{task.startedAt ? `Started ${startedAgo}s ago` : "Queued"}</div>
+      <div className="work-timer" aria-live="polite">
+        <strong>{workingLine.label}</strong>
+        <span>{workingLine.time}</span>
+      </div>
       {task.parameters?.handoffFrom && <div className="meta-line">Received by handoff from {task.parameters.handoffFrom}</div>}
     </>
   );
@@ -102,7 +114,25 @@ function HistoryBody({ record }) {
   return (
     <>
       <div className="fp-label">{record.status === "failed" ? "Error" : "Result"}</div>
+      {record.elapsedMs != null && <div className="meta-line">Response received in {formatElapsed(record.elapsedMs)}</div>}
       <div className="result-box">{record.status === "failed" ? record.error : record.result}</div>
     </>
   );
+}
+
+function requestStateLabel(task, elapsedMs) {
+  if (task.requestState === "sending") return { label: "Sending request...", time: formatClock(elapsedMs) };
+  if (task.requestState === "processing") return { label: "ARIA is putting everything together...", time: formatClock(elapsedMs) };
+  if (task.requestState === "needs_approval") return { label: "ARIA needs your approval", time: formatElapsed(elapsedMs) };
+  if (task.requestState === "timed_out" || task.status === "timed_out") return { label: "This job is taking longer than expected", time: formatElapsed(elapsedMs) };
+  if (task.completedAt || task.elapsedMs != null) return { label: "Response received in", time: formatElapsed(elapsedMs) };
+  if (task.startedAt) return { label: "ARIA is working...", time: formatClock(elapsedMs) };
+  return { label: "Ready For Work", time: "00:00" };
+}
+
+function formatClock(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const minutes = String(Math.floor(total / 60)).padStart(2, "0");
+  const seconds = String(total % 60).padStart(2, "0");
+  return `${minutes}:${seconds}`;
 }

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="RentReady AI Agent Village">
+  <rect width="512" height="512" rx="96" fill="#7a4d28"/>
+  <circle cx="256" cy="256" r="188" fill="#ffd866"/>
+  <path d="M128 274 256 156l128 118v134a20 20 0 0 1-20 20h-74v-92h-68v92h-74a20 20 0 0 1-20-20Z" fill="#fff8e8"/>
+  <path d="m104 278 152-142 152 142-30 34-122-114-122 114Z" fill="#2f8f5b"/>
+  <rect x="156" y="306" width="52" height="48" rx="10" fill="#4ea8de"/>
+  <rect x="304" y="306" width="52" height="48" rx="10" fill="#e85b57"/>
+  <circle cx="256" cy="94" r="28" fill="#f2994a"/>
+</svg>

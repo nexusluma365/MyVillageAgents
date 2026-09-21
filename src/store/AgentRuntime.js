@@ -334,6 +334,10 @@ export class AgentRuntime {
 
   // ---- task lifecycle -----------------------------------------------
   async assign(taskDef, params) {
+    if (this.currentTask) {
+      this.store.getState().pushToast(`${this.cfg.name} is already working. Please wait for this request to finish.`, "assigned");
+      return;
+    }
     clearTimeout(this.idleTimer);
     releaseAgentReservations(this.id);
     this.motion.interaction = null;
@@ -349,14 +353,18 @@ export class AgentRuntime {
     let offDone = () => {};
     let offFail = () => {};
     const cleanup = () => { offStarted(); offProgress(); offDone(); offFail(); };
-    offStarted = this.bus.on("task.started", (p) => { if (p.agentId === this.id) this.onTaskEvent(p.task); });
-    offProgress = this.bus.on("task.progress", (p) => { if (p.agentId === this.id) this.onTaskEvent(p.task); });
+    offStarted = this.bus.on("task.started", (p) => {
+      if (p.agentId === this.id && this.isCurrentTask(p.task)) this.onTaskEvent(p.task);
+    });
+    offProgress = this.bus.on("task.progress", (p) => {
+      if (p.agentId === this.id && this.isCurrentTask(p.task)) this.onTaskEvent(p.task);
+    });
     offDone = this.bus.on("task.completed", (p) => {
-      if (p.agentId !== this.id) return;
+      if (p.agentId !== this.id || !this.isCurrentTask(p.task)) return;
       this.handleTaskDoneEvent(p.task, true, cleanup);
     });
     offFail = this.bus.on("task.failed", (p) => {
-      if (p.agentId !== this.id) return;
+      if (p.agentId !== this.id || !this.isCurrentTask(p.task)) return;
       this.handleTaskDoneEvent(p.task, false, cleanup);
     });
 
@@ -382,6 +390,11 @@ export class AgentRuntime {
       this.pendingTaskDone = null;
       setTimeout(() => this.handleTaskDoneEvent(pending.task, pending.success, pending.cleanup), 650);
     }
+  }
+
+  isCurrentTask(task) {
+    if (!task?.id) return false;
+    return !this.currentTask || this.currentTask.id === task.id;
   }
 
   handleTaskDoneEvent(task, success, cleanup) {
@@ -438,9 +451,10 @@ export class AgentRuntime {
     if (!isSpecialist(this.id)) {
       this.store.getState().openAgentAlert(
         this.id,
-        success ? "complete" : "error",
+        success ? "complete" : task.status === "timed_out" ? "timed_out" : "error",
         success ? `Task complete. "${task.title}" is ready for review.` : task.error,
-        success ? "normal" : "error"
+        success ? "normal" : "error",
+        task
       );
     }
     this.store.getState().addHistory({
@@ -448,6 +462,16 @@ export class AgentRuntime {
       title: task.title, status: task.status, result: task.result, error: task.error,
       completedAt: task.completedAt || Date.now(),
       sourceAgentId: this.id,
+      requestId: task.requestId,
+      userMessage: task.userMessage,
+      route: task.route,
+      startedAt: task.startedAt,
+      elapsedMs: task.elapsedMs,
+      agentsInvolved: task.resultMeta?.agentsInvolved || [],
+      requiresApproval: task.resultMeta?.requiresApproval === true,
+      normalizedResponse: task.resultMeta?.normalizedResponse || null,
+      errorMeta: task.errorMeta || null,
+      retry: !success ? { agentId: this.id, taskId: task.type, params: task.parameters } : null,
     });
     this.store.getState().recordTaskOutcome(this.id, this.cfg, task, success);
 
