@@ -59,8 +59,7 @@ export function summarizeResult(task) {
 
 export function approvalFromTask(task, agentConfig) {
   const meta = task?.resultMeta || {};
-  const websiteOrDeveloper = task?.agentId === "automation" || agentConfig?.id === "automation";
-  const requiresApproval = Boolean(meta.requiresApproval || meta.proposedChange || meta.executionEndpoint || websiteOrDeveloper);
+  const requiresApproval = meta.requiresApproval === true;
   if (!requiresApproval || task?.status !== "completed") return null;
 
   const label = SPECIALIST_LABELS[task.agentId] || agentConfig?.role || "Specialist";

@@ -106,6 +106,7 @@ export class RealAriaProvider {
       throw new AriaProviderError(safeMessageFromBody(body) || "ARIA could not finish that request.", response.statusCode, "router_error");
     }
     const formatted = formatAriaRouterResponse(body);
+    const requiresApproval = normalizeRequiresApproval(body.requiresApproval);
 
     task.status = "completed";
     task.stage = "Complete";
@@ -116,7 +117,7 @@ export class RealAriaProvider {
       status: firstString(body.status, "completed"),
       publicSummary: formatted,
       agentsInvolved: normalizeAgentsInvolved(body.agentsInvolved, body.agent),
-      requiresApproval: Boolean(body.requiresApproval),
+      requiresApproval,
       needsAttention: normalizeList(body.needsAttention),
       recommendations: normalizeList(body.recommendations),
       findings: normalizeList(body.findings),
@@ -175,31 +176,22 @@ function normalizeSpecialistHint(specialist) {
 }
 
 function formatAriaRouterResponse(body = {}) {
-  const main = firstString(body.message, body.summary, body.reply, body.result?.message, body.result?.summary);
-  const lines = [];
-  if (main) lines.push(main);
+  const message = firstString(body.message);
+  if (message) return message;
 
-  const findings = normalizeList(body.findings);
-  const recommendations = normalizeList(body.recommendations);
-  const needsAttention = normalizeList(body.needsAttention);
+  console.warn("[RealAriaProvider] ARIA response did not include a message field.", body);
+  const fallback = firstString(body.summary, body.reply, body.result?.message, body.result?.summary);
+  if (fallback) return fallback;
 
-  if (findings.length) {
-    lines.push("Here is what we found:");
-    lines.push(...findings.map((item) => `- ${item}`));
-  }
-  if (recommendations.length) {
-    lines.push("I think we should:");
-    lines.push(...recommendations.map((item) => `- ${item}`));
-  }
-  if (needsAttention.length) {
-    lines.push("This needs attention:");
-    lines.push(...needsAttention.map((item) => `- ${item}`));
-  }
-  if (body.requiresApproval) {
-    lines.push(buildApprovalQuestion(body, main));
-  }
+  return "ARIA finished the task, but no message was returned.";
+}
 
-  return lines.join("\n\n").trim() || "Okay Boss. I checked with the team and the request is complete.";
+function normalizeRequiresApproval(value) {
+  if (value === true) return true;
+  if (typeof value === "string") {
+    return value.trim().toLowerCase() === "true";
+  }
+  return false;
 }
 
 function normalizeAgentsInvolved(agentsInvolved, agent) {

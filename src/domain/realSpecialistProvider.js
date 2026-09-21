@@ -134,7 +134,7 @@ function normalizeSpecialistResponse(response, task) {
     error: success ? null : result,
     meta: {
       publicSummary: firstString(body.publicSummary, body.public_summary, body.summary, body.message, result),
-      requiresApproval: Boolean(body.requiresApproval || body.requires_approval || body.approvalRequired),
+      requiresApproval: normalizeRequiresApproval(body.requiresApproval ?? body.requires_approval ?? body.approvalRequired),
       approvalTitle: firstString(body.approvalTitle, body.approval_title),
       approvalQuestion: firstString(body.approvalQuestion, body.approval_question),
       proposedChange: firstString(body.proposedChange, body.proposed_change, body.change?.summary),
@@ -144,6 +144,12 @@ function normalizeSpecialistResponse(response, task) {
       sourceTaskId: task.id,
     },
   };
+}
+
+function normalizeRequiresApproval(value) {
+  if (value === true) return true;
+  if (typeof value === "string") return value.trim().toLowerCase() === "true";
+  return false;
 }
 
 function normalizeSpecialistError(error) {
