@@ -8,9 +8,18 @@ import TaskMenu from "./ui/TaskMenu.jsx";
 import DetailPanel from "./ui/DetailPanel.jsx";
 import ActivityPanel from "./ui/ActivityPanel.jsx";
 import AgentAlert from "./ui/AgentAlert.jsx";
+import AuthGate from "./ui/AuthGate.jsx";
 import { useVillageStore } from "./store/useVillageStore.js";
 
 export default function App() {
+  return (
+    <AuthGate>
+      <VillageApp />
+    </AuthGate>
+  );
+}
+
+function VillageApp() {
   const initAgents = useVillageStore((s) => s.initAgents);
 
   useEffect(() => {

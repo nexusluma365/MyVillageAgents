@@ -10,6 +10,11 @@
   node_bundler = "esbuild"
 
 [[redirects]]
+  from = "/api/aria-router"
+  to = "/.netlify/functions/aria-router"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

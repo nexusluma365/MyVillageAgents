@@ -40,6 +40,40 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
 #viewport{flex:1 1 auto;position:relative;overflow:hidden;min-height:0;}
 #viewport canvas{display:block;}
 
+.login-screen{
+  position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:
+    linear-gradient(rgba(43,84,38,.22), rgba(43,84,38,.22)),
+    radial-gradient(circle at 24% 18%, rgba(255,216,102,.36), transparent 28%),
+    linear-gradient(145deg, #9fc772, #6ca05a 55%, #416f3a);
+}
+.login-card{
+  width:min(380px, 100%);display:flex;flex-direction:column;gap:12px;padding:24px;
+  border-radius:18px;background:linear-gradient(180deg, #fffefb, #f7ebcf);
+  border:3px solid rgba(156,111,28,.48);box-shadow:0 24px 70px rgba(20,40,20,.34), 0 5px 0 rgba(156,111,28,.48);
+}
+.login-mark{
+  width:52px;height:52px;border-radius:16px;background:linear-gradient(150deg, var(--gold-1), var(--gold-2));
+  border:2px solid var(--gold-edge);display:flex;align-items:center;justify-content:center;font-size:25px;
+  box-shadow:0 3px 0 var(--gold-edge), 0 4px 10px rgba(0,0,0,.22);
+}
+.login-card h1{margin:0;font-family:var(--font-display);font-size:28px;line-height:1;color:var(--text);}
+.login-card p{margin:3px 0 8px;color:var(--text-muted);font-size:13px;font-weight:800;}
+.login-card label{display:flex;flex-direction:column;gap:5px;color:var(--text-muted);font-size:12px;font-weight:900;}
+.login-card input{
+  min-height:46px;border-radius:12px;border:1px solid var(--panel-border);padding:10px 12px;
+  background:#fff;font:600 16px var(--font);color:var(--text);
+}
+.login-card button{
+  min-height:48px;border:0;border-radius:12px;background:linear-gradient(180deg, var(--gold-1), var(--gold-2));
+  color:#4a3110;font-family:var(--font-display);font-size:16px;font-weight:800;cursor:pointer;
+  box-shadow:0 3px 0 var(--gold-edge);
+}
+.login-error{
+  padding:9px 11px;border-radius:10px;background:rgba(209,73,74,.1);color:var(--danger);
+  font-size:13px;font-weight:800;
+}
+
 #zoom-controls{position:absolute;right:14px;bottom:18px;display:flex;flex-direction:column;gap:6px;z-index:20;}
 #zoom-controls button{
   width:38px;height:38px;border-radius:12px;border:2px solid var(--gold-edge);

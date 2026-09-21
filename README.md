@@ -15,23 +15,27 @@ npm run build    # production bundle (verified — builds clean, ~280KB gz)
 
 Node 18+ recommended.
 
-## Netlify deploy
+## Deploying
 
-This project is ready for Netlify:
+This project is ready for Netlify and Vercel:
 
 - Build command: `npm run build`
 - Publish directory: `dist`
-- Functions directory: `netlify/functions`
-- Site access is protected by Netlify Basic Auth in `public/_headers`.
+- Netlify Functions directory: `netlify/functions`
+- Vercel API route: `api/aria-router.js`
+- Vercel SPA rewrites/security headers: `vercel.json`
+- Netlify server Basic Auth: `public/_headers`
+- Vercel/app login gate: `src/ui/AuthGate.jsx`
 
 Login:
 
 - Username: `Admin`
 - Password: `Millionaire1@`
 
-Ask Aria uses the same-origin Netlify Function at
-`/.netlify/functions/aria-router`. That function proxies the production n8n
-webhook from the server so the browser does not hit n8n CORS limits.
+Ask Aria uses the same-origin endpoint at `/api/aria-router`. On Vercel, that
+is `api/aria-router.js`. On Netlify, `netlify.toml` redirects it to the
+Netlify Function. The function proxies the production n8n webhook from the
+server so the browser does not hit n8n CORS limits.
 
 ## Aria routing model
 
@@ -54,7 +58,7 @@ Fully connected in this repo:
 - 3D village UI, selection, status panels, Activity tabs, toasts, and Aria
   alerts.
 - Central Aria request entry point.
-- Netlify ARIA proxy to the production n8n webhook. Aria/n8n decides which
+- Same-origin ARIA proxy to the production n8n webhook. Aria/n8n decides which
   specialist should work; the frontend only sends the owner request and
   optional route hint.
 - Private specialist status views with sensitive request/result data hidden.
@@ -73,8 +77,8 @@ Requires your real backend URLs:
 Create a `.env.local` file for local development:
 
 ```bash
-# Ask Aria uses /.netlify/functions/aria-router by default.
-# Leave VITE_ARIA_ROUTER_URL unset for Netlify deploys.
+# Ask Aria uses /api/aria-router by default.
+# Leave VITE_ARIA_ROUTER_URL unset for Netlify and Vercel deploys.
 
 VITE_ARIA_HANDOFF_URL=https://your-backend.example.com/aria/rental-qualification
 

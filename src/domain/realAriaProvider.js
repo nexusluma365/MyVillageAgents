@@ -1,6 +1,6 @@
 const ARIA_TASK_ID = "process_rental_qualification";
 const ARIA_ROUTE_TASK_ID = "aria_route_request";
-const DEFAULT_ARIA_ROUTER_URL = "/.netlify/functions/aria-router";
+const DEFAULT_ARIA_ROUTER_URL = "/api/aria-router";
 const DEFAULT_TIMEOUT_MS = 60000;
 
 export class RealAriaProvider {
