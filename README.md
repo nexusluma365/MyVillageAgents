@@ -156,7 +156,6 @@ src/
     ariaRouter.js       Aria/head-agent routing and approval helpers
     realAriaProvider.js live Aria router + rental qualification calls
     realSpecialistProvider.js live specialist backend calls
-    mockProvider.js     legacy fallback for non-routed local development
     historyStore.js      localStorage task history
 
   store/            <- glue layer and Aria-owned orchestration

@@ -1,7 +1,7 @@
 const ARIA_TASK_ID = "process_rental_qualification";
 const ARIA_ROUTE_TASK_ID = "aria_route_request";
 const DEFAULT_ARIA_ROUTER_URL = "/api/aria-router";
-const DEFAULT_TIMEOUT_MS = 180000;
+const DEFAULT_TIMEOUT_MS = 330000;
 
 export class RealAriaProvider {
   constructor(bus, options = {}) {
@@ -13,9 +13,13 @@ export class RealAriaProvider {
   }
 
   assignTask(agent, agentConfig, taskDef, params = {}) {
-    const parameters = taskDef.id === ARIA_ROUTE_TASK_ID
-      ? { request: String(params.request || "").trim(), specialist: params.specialist || "auto", context: params.context || null }
-      : { leadId: String(params.leadId || "").trim() };
+    const parameters = taskDef.id === ARIA_TASK_ID
+      ? { leadId: String(params.leadId || "").trim() }
+      : {
+        request: buildOwnerRequest(taskDef, params),
+        specialist: params.specialist || "auto",
+        context: params.context || null,
+      };
     const task = {
       id: "aria-" + this._taskSeq++,
       agentId: agent.id,
@@ -39,7 +43,7 @@ export class RealAriaProvider {
 
   async runTask(task) {
     try {
-      if (task.type === ARIA_ROUTE_TASK_ID) {
+      if (task.type !== ARIA_TASK_ID) {
         await this.runRouterTask(task);
         return;
       }
@@ -131,7 +135,14 @@ export class RealAriaProvider {
 }
 
 export function isRealAriaTask(agent, taskDef) {
-  return agent?.id === "data" && (taskDef?.id === ARIA_TASK_ID || taskDef?.id === ARIA_ROUTE_TASK_ID);
+  return agent?.id === "data" && Boolean(taskDef?.id);
+}
+
+function buildOwnerRequest(taskDef, params = {}) {
+  const direct = firstString(params.request, params.instructions, params.dataset, params.source, params.recordType, params.topic);
+  if (!direct) return "";
+  if (taskDef?.id === ARIA_ROUTE_TASK_ID) return direct;
+  return `Owner selected "${taskDef?.label || "Ask Aria"}" in the Village.\n\n${direct}`;
 }
 
 function validateAriaTask(task, endpoint) {
@@ -335,7 +346,7 @@ function httpStatusMessage(status) {
   if (status === 400) return "ARIA could not process that request.";
   if (status === 401 || status === 403) return "ARIA is not authorized to access that service.";
   if (status === 404) return "ARIA could not find that service.";
-  if (status === 504) return "ARIA is still waiting on the backend, but the host ended the request.";
+  if (status === 504) return "ARIA took longer than this host allowed. Please try again with a shorter request, or increase the Vercel function duration.";
   if (status >= 500) return "The ARIA service had a server error.";
   return "ARIA could not finish this request.";
 }

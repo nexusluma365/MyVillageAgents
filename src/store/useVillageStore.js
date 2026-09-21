@@ -88,7 +88,7 @@ export const useVillageStore = create((set, get) => ({
     const runtime = runtimes[agentId];
     const cfg = runtime.cfg;
     const taskDef = cfg.tasks.find((t) => t.id === taskId);
-    const runParams = taskDef.id === "aria_route_request"
+    const runParams = taskDef.id !== "process_rental_qualification"
       ? { ...params, context: buildAgentContextSnapshot(get().agents, get().specialistStatus) }
       : params;
     runtime.assign(taskDef, runParams);

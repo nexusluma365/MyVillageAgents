@@ -1,7 +1,7 @@
 import { proxyAriaRequest } from "../server/ariaProxy.js";
 
 export const config = {
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 const JSON_HEADERS = {
