@@ -27,38 +27,62 @@ export const AGENTS_CONFIG = [
     ],
   },
   {
-    id: "data", name: "Aria", role: "Head Agent / Client Contact",
-    workstation: "Data / Qualification Station",
+    id: "data", name: "Aria", role: "Head Agent / AI Manager",
+    workstation: "ARIA Command Center",
     personality: "Focused, analytical, calm.",
-    responsibilities: ["Receive every request", "Route work to specialists", "Summarize team results", "Own approvals", "Protect live changes"],
+    responsibilities: ["Manage RentReady", "Delegate work", "Report results", "Own approvals", "Protect live changes"],
     emoji: "📊", c1: "#9b6bce", c2: "#7847a8",
     workNode: "dataWork", yardNode: "dataYard", building: "b-data",
     tasks: [
-      { id: "aria_route_request", label: "Ask Aria", delegates: true, fields: [
+      { id: "aria_route_request", label: "Ask Aria", subtext: "Type a custom request", delegates: true, fields: [
         { key: "request", label: "Request", type: "textarea", placeholder: "Tell Aria what you need done." },
-        { key: "specialist", label: "Route", type: "select", options: ["auto", "sage", "milo", "forge", "atlas"] },
       ] },
-      { id: "process_rental_qualification", label: "Process Rental Qualification", realBackend: true, fields: [
-        { key: "leadId", label: "Lead ID", type: "text", placeholder: "lead_..." },
-      ] },
-      { id: "analyze_data", label: "Analyze Data", fields: [
-        { key: "dataset", label: "Dataset Description", type: "textarea" },
-      ] },
-      { id: "organize_leads", label: "Organize Leads", fields: [
-        { key: "source", label: "Lead Source", type: "text" },
-      ] },
-      { id: "process_records", label: "Process Records", fields: [
-        { key: "recordType", label: "Record Type", type: "text" },
-      ] },
-      { id: "generate_report", label: "Generate Report", fields: [
-        { key: "topic", label: "Report Topic", type: "text" },
-      ] },
-      { id: "clean_data", label: "Clean Data", fields: [
-        { key: "dataset", label: "Dataset Name", type: "text" },
-      ] },
-      { id: "custom", label: "Custom Task", fields: [
-        { key: "instructions", label: "Instructions", type: "textarea" },
-      ] },
+      {
+        id: "quick_check_rentready",
+        label: "Check RentReady",
+        subtext: "Inspect the website and report issues",
+        delegates: true,
+        quickRequest: "Review the current RentReady project with FORGE. Inspect the existing website code and identify any important problems, broken functionality, obvious errors, or areas that need my attention. Do not make any changes. Have FORGE investigate first, then summarize the important findings for me in simple language. Only report issues supported by what FORGE can actually inspect.",
+      },
+      {
+        id: "quick_check_leads",
+        label: "Check My Leads",
+        subtext: "Review leads and find opportunities",
+        delegates: true,
+        quickRequest: "Have SAGE review the current RentReady lead data available to the team. Tell me how many relevant leads we currently have, what meaningful patterns you see, which leads or groups may need attention, and what actions you recommend next. Do not contact, modify, delete, or automatically act on any lead. Summarize SAGE's findings for me and tell me what you recommend I do next.",
+      },
+      {
+        id: "quick_analyze_sales",
+        label: "Analyze Sales",
+        subtext: "Review conversions and revenue",
+        delegates: true,
+        quickRequest: "Analyze the RentReady sales and conversion information currently available to the team. Use the appropriate specialist or specialists. Tell me what is working, where customers appear to be dropping off, any important conversion or revenue patterns supported by the available data, and the highest-priority opportunities worth investigating. Do not change the website, pricing, funnel, advertising, or customer records. Report the findings and recommended next steps to me first.",
+      },
+      {
+        id: "quick_growth_opportunities",
+        label: "Find Growth Opportunities",
+        subtext: "Research traffic and marketing opportunities",
+        delegates: true,
+        quickRequest: "Have MILO research current growth opportunities relevant to RentReady. Focus on high-intent renters actively trying to solve apartment approval, bad credit, previous denial, eviction, broken lease, second-chance housing, rental requirements, or similar apartment-search problems. Use current research when available. Identify useful search themes, customer problems, messaging opportunities, and acquisition ideas. Do not launch ads, publish content, or change the website. Summarize MILO's findings and tell me which opportunities deserve my attention.",
+      },
+      {
+        id: "quick_business_health",
+        label: "Business Health Check",
+        subtext: "Ask the team what needs attention",
+        delegates: true,
+        quickRequest: "Run a RentReady business health check using the specialists that are actually needed. Review the information currently available across the team and identify important issues, opportunities, unfinished work, or anything that needs my attention. Do not make changes or take external actions. Give me a concise owner-level summary organized as:\n1. What looks good\n2. What needs attention\n3. What you recommend doing next\n4. Which agent should handle each recommended action",
+      },
+      {
+        id: "quick_research_idea",
+        label: "Research an Idea",
+        subtext: "Investigate a business question",
+        delegates: true,
+        submitLabel: "Start Research",
+        fields: [
+          { key: "ownerInput", label: "What should ARIA research?", type: "textarea", placeholder: "Example: Is $97 a good price for our second-chance apartment search?" },
+        ],
+        requestTemplate: "Research this question for me using the appropriate RentReady specialist or specialists:\n\n\"{ownerInput}\"\n\nUse current evidence where appropriate. Separate verified information from assumptions. Do not make business changes based on the research. Return the findings to me through ARIA along with practical options I can consider.",
+      },
     ],
   },
   {

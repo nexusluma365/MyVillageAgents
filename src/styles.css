@@ -161,8 +161,11 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
 .fp-status-row{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:700;color:var(--text-muted);margin-bottom:8px;}
 .sdot{width:8px;height:8px;border-radius:50%;}
 .task-list{display:flex;flex-direction:column;gap:6px;max-height:280px;overflow:auto;}
-.task-item{display:flex;justify-content:space-between;align-items:center;padding:11px 12px;border-radius:10px;background:rgba(0,0,0,0.03);font-size:13px;font-weight:700;cursor:pointer;}
+.task-item{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;background:rgba(0,0,0,0.03);font-size:13px;font-weight:700;cursor:pointer;}
 .task-item:hover{background:rgba(0,0,0,0.06);}
+.task-item-copy{display:flex;flex-direction:column;gap:3px;min-width:0;}
+.task-item-copy strong{font-size:13.5px;color:var(--text);}
+.task-item-copy small{font-size:11px;line-height:1.25;color:var(--text-soft);font-weight:700;}
 .task-item .arrow{color:var(--text-soft);}
 .field{margin-bottom:9px;display:flex;flex-direction:column;gap:4px;}
 .field label{font-size:11px;font-weight:700;color:var(--text-muted);}

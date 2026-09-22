@@ -192,7 +192,7 @@ export function isRealAriaTask(agent, taskDef) {
 function buildOwnerRequest(taskDef, params = {}) {
   const direct = firstString(params.request, params.instructions, params.dataset, params.source, params.recordType, params.topic);
   if (!direct) return "";
-  if (taskDef?.id === ARIA_ROUTE_TASK_ID) return direct;
+  if (taskDef?.id === ARIA_ROUTE_TASK_ID || taskDef?.quickRequest || taskDef?.requestTemplate) return direct;
   return `Owner selected "${taskDef?.label || "Ask Aria"}" in the Village.\n\n${direct}`;
 }
 

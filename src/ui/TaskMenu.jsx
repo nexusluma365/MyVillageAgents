@@ -18,9 +18,23 @@ export default function TaskMenu() {
   const taskDef = taskMenu.taskDef;
   if (isSpecialist(cfg.id)) return null;
   const isBusy = Boolean(agents[cfg.id]?.currentTask);
-  const requestText = String(values.request || "").trim();
-  const isAriaRequest = taskDef?.id === "aria_route_request";
-  const canSubmit = !isBusy && (!isAriaRequest || requestText.length > 0);
+  const requiredFields = (taskDef?.fields || []).filter((field) => field.type !== "select");
+  const canSubmit = !isBusy && (!taskDef || requiredFields.every((field) => String(values[field.key] || "").trim().length > 0));
+
+  function submitTask(def, submittedValues = values) {
+    if (!def || isBusy) return;
+    const params = buildTaskParams(def, submittedValues);
+    closeFloatingPanels();
+    assignTaskToAgent(cfg.id, def.id, params);
+  }
+
+  function chooseTask(def) {
+    if (def.quickRequest) {
+      submitTask(def, {});
+      return;
+    }
+    openTaskMenu(cfg.id, def);
+  }
 
   return (
     <div className="floating-panel" style={{ right: 16, top: 76 }}>
@@ -36,15 +50,19 @@ export default function TaskMenu() {
 
       {!taskDef ? (
         <>
-          <div className="fp-label">Choose Task</div>
+          <div className="fp-label">Quick Commands</div>
           <div className="agent-identity-note">
             <strong>{cfg.workstation}</strong>
             <span>{cfg.responsibilities?.slice(0, 3).join(" · ")}</span>
           </div>
           <div className="task-list">
             {cfg.tasks.map((t) => (
-              <div className="task-item" key={t.id} onClick={() => openTaskMenu(cfg.id, t)}>
-                {t.label}<span className="arrow">›</span>
+              <div className="task-item" key={t.id} onClick={() => chooseTask(t)}>
+                <span className="task-item-copy">
+                  <strong>{t.label}</strong>
+                  {t.subtext && <small>{t.subtext}</small>}
+                </span>
+                <span className="arrow">›</span>
               </div>
             ))}
           </div>
@@ -72,15 +90,31 @@ export default function TaskMenu() {
             className="fp-btn"
             disabled={!canSubmit}
             onClick={() => {
-              if (!canSubmit) return;
-              closeFloatingPanels();
-              assignTaskToAgent(cfg.id, taskDef.id, values);
+            if (!canSubmit) return;
+              submitTask(taskDef, values);
             }}
           >
-            {isBusy ? "ARIA is thinking..." : "Assign Task"}
+            {isBusy ? "ARIA is thinking..." : taskDef.submitLabel || "Assign Task"}
           </button>
         </>
       )}
     </div>
   );
+}
+
+function buildTaskParams(taskDef, values = {}) {
+  if (taskDef.quickRequest) {
+    return { request: taskDef.quickRequest, specialist: "auto" };
+  }
+  if (taskDef.requestTemplate) {
+    return {
+      request: applyRequestTemplate(taskDef.requestTemplate, values),
+      specialist: "auto",
+    };
+  }
+  return values;
+}
+
+function applyRequestTemplate(template, values = {}) {
+  return String(template).replace(/\{(\w+)\}/g, (_, key) => String(values[key] || "").trim());
 }
