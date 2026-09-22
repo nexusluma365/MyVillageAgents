@@ -1,4 +1,5 @@
 import { normalizeAriaResponse, normalizeAriaTransportError } from "./ariaResponseNormalizer.js";
+import { buildSafeEnvelope } from "./transportParse.js";
 
 const ARIA_TASK_ID = "process_rental_qualification";
 const ARIA_ROUTE_TASK_ID = "aria_route_request";
@@ -258,13 +259,16 @@ async function postAriaHandoff(endpoint, payload, timeoutMs) {
       signal: controller.signal,
     });
     const text = await response.text();
-    const body = parseJsonBody(text, { strict: response.ok });
 
     if (!response.ok) {
+      const body = buildSafeEnvelope(text, { httpOk: false });
       const message = safeMessageFromBody(body) || httpStatusMessage(response.status);
       throw new AriaProviderError(message, response.status, response.status === 524 ? "long_running" : "http_error");
     }
 
+    // Same fix as server/ariaProxy.js: a readable 200 response body must
+    // never be discarded just because it isn't strict JSON.
+    const body = buildSafeEnvelope(text, { httpOk: true });
     return { statusCode: response.status, body };
   } catch (error) {
     if (error.name === "AbortError") {
@@ -273,16 +277,6 @@ async function postAriaHandoff(endpoint, payload, timeoutMs) {
     throw error;
   } finally {
     clearTimeout(timeout);
-  }
-}
-
-function parseJsonBody(text, options = {}) {
-  if (!text) return {};
-  try {
-    return JSON.parse(text);
-  } catch {
-    if (!options.strict) return {};
-    throw new AriaProviderError("Aria returned a response the Village could not read.", 0, "invalid_json");
   }
 }
 
@@ -319,7 +313,7 @@ function httpStatusMessage(status) {
   if (status === 401 || status === 403) return "I do not have permission to reach that service right now.";
   if (status === 404) return "I could not find the backend route for that request.";
   if (status === 408 || status === 504) return "This job is taking longer than expected.";
-  if (status === 524) return "This is a bigger job. It may still be running.";
+  if (status === 524) return "This job is taking longer than expected.";
   if (status === 429) return "The backend is busy right now. Please wait a moment before trying again.";
   if (status >= 500) return "The backend had a problem while I was working.";
   return "I could not finish this request.";

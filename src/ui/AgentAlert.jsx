@@ -3,6 +3,7 @@ import { useVillageStore } from "../store/useVillageStore.js";
 import { statusLabel } from "../domain/agentsConfig.js";
 import { formatElapsed, splitAriaMessageSections } from "../domain/ariaResponseNormalizer.js";
 import AgentPortraitScene from "../three/characters/AgentPortraitScene.jsx";
+import ReceivingDots from "./ReceivingDots.jsx";
 
 const ALERT_COPY = {
   complete: "Task complete. Your result is ready for review.",
@@ -137,6 +138,7 @@ function DialogueText({ sections, alertId, finalActions }) {
       <button className="dialogue-text" type="button" onClick={finishSection} aria-live="polite">
         <span>{visibleText}</span>
         {isTyping && <i className="typing-cursor" aria-hidden="true" />}
+        {isTyping && <ReceivingDots inline />}
       </button>
       {hasNext && isComplete && (
         <button className="dialogue-next" type="button" onClick={nextSection}>

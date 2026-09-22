@@ -3,7 +3,7 @@ const MAX_UNWRAP_DEPTH = 6;
 const FRIENDLY_ERRORS = {
   network: "I'm having trouble reaching the backend right now.",
   timeout: "This job is taking longer than expected.",
-  long_running: "This is a bigger job. It may still be running.",
+  long_running: "This job is taking longer than expected.",
   invalid_json: "I finished the job, but I had trouble reading the result.",
   empty_response: "I finished the job, but I did not receive a readable result.",
   server: "The backend had a problem while I was working.",

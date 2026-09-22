@@ -3,6 +3,7 @@ import { useVillageStore } from "../store/useVillageStore.js";
 import { STAGE_LABELS, STATUS_COLORS, statusLabel } from "../domain/agentsConfig.js";
 import { isSpecialist } from "../domain/ariaRouter.js";
 import { formatElapsed } from "../domain/ariaResponseNormalizer.js";
+import ReceivingDots from "./ReceivingDots.jsx";
 
 export default function DetailPanel() {
   const detailPanel = useVillageStore((s) => s.detailPanel);
@@ -70,7 +71,7 @@ function ProgressBody({ task, status }) {
         ))}
       </div>
       <div className="work-timer" aria-live="polite">
-        <strong>{workingLine.label}</strong>
+        <strong>{workingLine.label}{workingLine.waiting && <ReceivingDots inline />}</strong>
         <span>{workingLine.time}</span>
       </div>
       {task.parameters?.handoffFrom && <div className="meta-line">Received by handoff from {task.parameters.handoffFrom}</div>}
@@ -121,12 +122,12 @@ function HistoryBody({ record }) {
 }
 
 function requestStateLabel(task, elapsedMs) {
-  if (task.requestState === "sending") return { label: "Sending request...", time: formatClock(elapsedMs) };
-  if (task.requestState === "processing") return { label: "ARIA is putting everything together...", time: formatClock(elapsedMs) };
+  if (task.requestState === "sending") return { label: "Sending request...", time: formatClock(elapsedMs), waiting: true };
+  if (task.requestState === "processing") return { label: "ARIA is putting everything together...", time: formatClock(elapsedMs), waiting: true };
   if (task.requestState === "needs_approval") return { label: "ARIA needs your approval", time: formatElapsed(elapsedMs) };
   if (task.requestState === "timed_out" || task.status === "timed_out") return { label: "This job is taking longer than expected", time: formatElapsed(elapsedMs) };
   if (task.completedAt || task.elapsedMs != null) return { label: "Response received in", time: formatElapsed(elapsedMs) };
-  if (task.startedAt) return { label: "ARIA is working...", time: formatClock(elapsedMs) };
+  if (task.startedAt) return { label: "ARIA is working...", time: formatClock(elapsedMs), waiting: true };
   return { label: "Ready For Work", time: "00:00" };
 }
 

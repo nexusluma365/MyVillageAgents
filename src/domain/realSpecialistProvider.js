@@ -1,4 +1,5 @@
 import { SPECIALIST_LABELS } from "./ariaRouter.js";
+import { buildSafeEnvelope } from "./transportParse.js";
 
 const DEFAULT_TIMEOUT_MS = 60000;
 
@@ -105,7 +106,7 @@ async function postJson(endpoint, payload, timeoutMs) {
       signal: controller.signal,
     });
     const text = await response.text();
-    const body = text ? JSON.parse(text) : {};
+    const body = buildSafeEnvelope(text, { httpOk: response.ok });
     if (!response.ok) {
       throw new SpecialistProviderError(firstString(body.message, body.error, body.detail) || "Specialist backend request failed.", response.status, "http_error");
     }
@@ -113,9 +114,6 @@ async function postJson(endpoint, payload, timeoutMs) {
   } catch (error) {
     if (error.name === "AbortError") {
       throw new SpecialistProviderError("The specialist backend timed out.", 0, "timeout");
-    }
-    if (error instanceof SyntaxError) {
-      throw new SpecialistProviderError("The specialist backend returned unreadable JSON.", 0, "invalid_json");
     }
     throw error;
   } finally {
