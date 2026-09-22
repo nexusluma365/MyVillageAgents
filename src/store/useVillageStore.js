@@ -262,7 +262,7 @@ export const useVillageStore = create((set, get) => ({
           });
         });
 
-      if (task.resultMeta?.requiresApproval) {
+      if (task.resultMeta?.requiresApproval || shouldAskOwnerDecision(task)) {
         const approval = approvalFromAriaTask(task);
         set((s) => ({ pendingApprovals: upsertApproval(s.pendingApprovals, approval) }));
         get().openAgentAlert(ARIA_AGENT_ID, "waiting", approval.question, "approval_required", { ...task, approvalId: approval.id });
@@ -348,7 +348,16 @@ export const useVillageStore = create((set, get) => ({
     }));
     try {
       const endpoint = approval.executionEndpoint || import.meta.env.VITE_APPROVAL_EXECUTION_URL || "";
-      if (!endpoint) throw new Error("No approval execution endpoint is configured. Set VITE_APPROVAL_EXECUTION_URL or return executionEndpoint from the specialist backend.");
+      if (!endpoint) {
+        set((s) => ({
+          pendingApprovals: s.pendingApprovals.map((item) => item.id === approvalId
+            ? { ...item, status: "approved", decidedAt: Date.now(), decisionResult: "Approved. Aria handed this back to the specialist." }
+            : item),
+        }));
+        get().pushToast("Approved. Aria handed this back to the specialist.", "completed");
+        get().runApprovedSpecialistVisual(approval);
+        return;
+      }
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -423,6 +432,32 @@ export const useVillageStore = create((set, get) => ({
     reopenApprovalAfterDetails(get, approval, agent?.cfg || null);
   },
 
+  runApprovedSpecialistVisual: (approval) => {
+    const specialistId = SPECIALIST_AGENT_IDS.includes(approval?.specialistId) ? approval.specialistId : null;
+    if (!specialistId) return;
+    const runtime = runtimes[specialistId];
+    const agent = get().agents[specialistId];
+    const task = agent ? buildApprovalActionTask(approval, agent.cfg) : null;
+    if (!runtime || !agent || !task || agent.currentTask) return;
+    get().fireBeam(ARIA_AGENT_ID, specialistId);
+    get().setSpecialistLiveStatus(specialistId, {
+      status: "assigned",
+      currentTask: task.title,
+      task: task.title,
+      lastResult: "Aria received approval and handed me the next step.",
+    });
+    runtime.startVisualWork(task);
+    setTimeout(() => {
+      runtime.finishVisualWork({
+        ...task,
+        status: "completed",
+        stage: "Complete",
+        completedAt: Date.now(),
+        result: "Approved next step acknowledged by Aria.",
+      }, true);
+    }, 7000);
+  },
+
   // ---- activity panel ----
   toggleActivityPanel: () => set((s) => ({ activityPanel: { ...s.activityPanel, open: !s.activityPanel.open } })),
   openActivityPanel: () => set((s) => ({ activityPanel: { ...s.activityPanel, open: true } })),
@@ -489,15 +524,16 @@ function upsertApproval(list, approval) {
 function approvalFromAriaTask(task) {
   const meta = task?.resultMeta || {};
   const specialistId = (meta.agentsInvolved || []).find((id) => SPECIALIST_AGENT_IDS.includes(id)) || ARIA_AGENT_ID;
+  const inferredQuestion = ownerDecisionQuestion(task.result || meta.publicSummary || "");
   return {
     id: "approval-" + task.id,
     taskId: task.id,
     agentId: ARIA_AGENT_ID,
     specialistId,
     title: task.title,
-    question: meta.approvalQuestion || "ARIA needs your approval before the next step. Should she go ahead?",
+    question: inferredQuestion || meta.approvalQuestion || "ARIA needs your approval before the next step. Should she go ahead?",
     summary: meta.publicSummary || task.result || "ARIA has a recommendation ready for approval.",
-    proposedChange: meta.proposedChange || task.result || "",
+    proposedChange: meta.proposedChange || inferredQuestion || task.result || "",
     executionEndpoint: meta.executionEndpoint || "",
     changePayload: meta.changePayload || null,
     status: "pending",
@@ -505,6 +541,23 @@ function approvalFromAriaTask(task) {
     decidedAt: null,
     decisionResult: null,
   };
+}
+
+function shouldAskOwnerDecision(task) {
+  if (!task || task.status !== "completed") return false;
+  if (task.resultMeta?.requiresApproval === true) return true;
+  return Boolean(ownerDecisionQuestion(task.result || task.resultMeta?.publicSummary || ""));
+}
+
+function ownerDecisionQuestion(message) {
+  const text = String(message || "").trim();
+  if (!text) return "";
+  const sentences = text.match(/[^.!?]+[.!?]+(?:["')\]]+)?|[^.!?]+$/gu) || [text];
+  const question = sentences.reverse().find((sentence) => {
+    const clean = sentence.trim();
+    return /\?$/.test(clean) && /\b(want me to|should i|should we|go ahead|approve|do that|have\s+\w+\s+do)\b/i.test(clean);
+  });
+  return question ? question.trim() : "";
 }
 
 function specialistIdsFromRouteHint(specialist) {
@@ -561,6 +614,29 @@ function buildApprovalDetailTask(approval, specialistConfig) {
     requestId: approval.taskId,
     type: "aria_more_details",
     title: `More Details: ${specialistConfig.role}`,
+    parameters: { delegatedBy: ARIA_AGENT_ID, approvalId: approval.id },
+    status: "processing",
+    requestState: "working",
+    stage: "Working",
+    createdAt: now,
+    startedAt: now,
+    completedAt: null,
+    elapsedMs: null,
+    result: null,
+    resultMeta: null,
+    error: null,
+  };
+}
+
+function buildApprovalActionTask(approval, specialistConfig) {
+  const now = Date.now();
+  return {
+    id: `approval-action-${approval.id}-${specialistConfig.id}-${now}`,
+    agentId: specialistConfig.id,
+    sourceAriaTaskId: approval.taskId,
+    requestId: approval.taskId,
+    type: "aria_approved_action",
+    title: `Approved: ${specialistConfig.role}`,
     parameters: { delegatedBy: ARIA_AGENT_ID, approvalId: approval.id },
     status: "processing",
     requestState: "working",
