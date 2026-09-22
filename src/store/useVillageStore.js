@@ -237,7 +237,7 @@ export const useVillageStore = create((set, get) => ({
       const approval = approvalFromTask({ ...task, agentId }, cfg);
       if (approval) {
         set((s) => ({ pendingApprovals: upsertApproval(s.pendingApprovals, approval) }));
-        get().openAgentAlert(ARIA_AGENT_ID, "waiting", approval.question, "approval_required");
+        get().openAgentAlert(ARIA_AGENT_ID, "waiting", approval.question, "approval_required", { ...task, approvalId: approval.id });
       } else {
         get().openAgentAlert(
           ARIA_AGENT_ID,
@@ -265,7 +265,7 @@ export const useVillageStore = create((set, get) => ({
       if (task.resultMeta?.requiresApproval) {
         const approval = approvalFromAriaTask(task);
         set((s) => ({ pendingApprovals: upsertApproval(s.pendingApprovals, approval) }));
-        get().openAgentAlert(ARIA_AGENT_ID, "waiting", approval.question, "approval_required");
+        get().openAgentAlert(ARIA_AGENT_ID, "waiting", approval.question, "approval_required", { ...task, approvalId: approval.id });
         return;
       }
 
@@ -376,6 +376,51 @@ export const useVillageStore = create((set, get) => ({
       }));
       get().openAgentAlert(ARIA_AGENT_ID, "error", error.message, "approval_error");
     }
+  },
+
+  requestApprovalDetails: (approvalId) => {
+    const approval = get().pendingApprovals.find((item) => item.id === approvalId);
+    if (!approval || approval.status !== "pending") return;
+    const specialistId = SPECIALIST_AGENT_IDS.includes(approval.specialistId) ? approval.specialistId : null;
+    set((s) => ({
+      pendingApprovals: s.pendingApprovals.map((item) => item.id === approvalId
+        ? { ...item, status: "investigating", decisionResult: "Aria asked for more details before a decision." }
+        : item),
+    }));
+    get().closeAgentAlert();
+    get().pushToast("Aria asked the specialist for more details.", "assigned");
+
+    if (!specialistId) {
+      reopenApprovalAfterDetails(get, approval, null);
+      return;
+    }
+
+    const runtime = runtimes[specialistId];
+    const agent = get().agents[specialistId];
+    const detailTask = agent ? buildApprovalDetailTask(approval, agent.cfg) : null;
+    if (runtime && agent && detailTask && !agent.currentTask) {
+      get().fireBeam(ARIA_AGENT_ID, specialistId);
+      get().setSpecialistLiveStatus(specialistId, {
+        status: "assigned",
+        currentTask: detailTask.title,
+        task: detailTask.title,
+        lastResult: "Aria asked me to look further before approval.",
+      });
+      runtime.startVisualWork(detailTask);
+      setTimeout(() => {
+        runtime.finishVisualWork({
+          ...detailTask,
+          status: "completed",
+          stage: "Complete",
+          completedAt: Date.now(),
+          result: "Additional details sent back to Aria for the owner.",
+        }, true);
+        reopenApprovalAfterDetails(get, approval, agent.cfg);
+      }, 7000);
+      return;
+    }
+
+    reopenApprovalAfterDetails(get, approval, agent?.cfg || null);
   },
 
   // ---- activity panel ----
@@ -505,4 +550,48 @@ function buildVisualDelegationTask(ariaTask, specialistConfig) {
     resultMeta: null,
     error: null,
   };
+}
+
+function buildApprovalDetailTask(approval, specialistConfig) {
+  const now = Date.now();
+  return {
+    id: `approval-detail-${approval.id}-${specialistConfig.id}-${now}`,
+    agentId: specialistConfig.id,
+    sourceAriaTaskId: approval.taskId,
+    requestId: approval.taskId,
+    type: "aria_more_details",
+    title: `More Details: ${specialistConfig.role}`,
+    parameters: { delegatedBy: ARIA_AGENT_ID, approvalId: approval.id },
+    status: "processing",
+    requestState: "working",
+    stage: "Working",
+    createdAt: now,
+    startedAt: now,
+    completedAt: null,
+    elapsedMs: null,
+    result: null,
+    resultMeta: null,
+    error: null,
+  };
+}
+
+function reopenApprovalAfterDetails(get, approval, specialistConfig) {
+  const specialistName = specialistConfig?.name || "the specialist";
+  const detailsLine = `More details requested from ${specialistName}. Review the recommendation again when ready.`;
+  setTimeout(() => {
+    useVillageStore.setState((s) => ({
+      pendingApprovals: s.pendingApprovals.map((item) => item.id === approval.id
+        ? { ...item, status: "pending", decisionResult: detailsLine }
+        : item),
+    }));
+    get().setActivityTab("approvals");
+    get().openActivityPanel();
+    get().openAgentAlert(
+      ARIA_AGENT_ID,
+      "waiting",
+      `${approval.question}\n\n${detailsLine}`,
+      "approval_required",
+      { id: approval.taskId, title: approval.title, approvalId: approval.id }
+    );
+  }, 350);
 }

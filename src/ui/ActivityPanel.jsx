@@ -12,6 +12,7 @@ export default function ActivityPanel() {
   const openHistoryDetail = useVillageStore((s) => s.openHistoryDetail);
   const pendingApprovals = useVillageStore((s) => s.pendingApprovals);
   const decideApproval = useVillageStore((s) => s.decideApproval);
+  const requestApprovalDetails = useVillageStore((s) => s.requestApprovalDetails);
   const clearActivityTab = useVillageStore((s) => s.clearActivityTab);
   const [, forceTick] = useState(0);
 
@@ -85,6 +86,7 @@ export default function ActivityPanel() {
                 <div className="approval-actions">
                   <button className="fp-btn" onClick={() => decideApproval(approval.id, "approve")}>Approve</button>
                   <button className="fp-btn ghost" onClick={() => decideApproval(approval.id, "reject")}>Reject</button>
+                  <button className="fp-btn ghost wide" onClick={() => requestApprovalDetails(approval.id)}>Give Me More Details</button>
                 </div>
               )}
               {approval.decisionResult && <div className="meta-line">{approval.decisionResult}</div>}

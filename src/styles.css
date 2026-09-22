@@ -173,6 +173,7 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
   color:#4a3110;font-family:var(--font-display);font-weight:700;font-size:14px;cursor:pointer;margin-top:6px;
   box-shadow:0 3px 0 var(--gold-edge);}
 .fp-btn.ghost{background:transparent;color:var(--accent);box-shadow:none;border:1px solid var(--panel-border);}
+.fp-btn.danger{color:#b93a3a;border-color:rgba(185,58,58,.24);}
 .fp-btn:disabled,.field input:disabled,.field select:disabled,.field textarea:disabled{opacity:.58;cursor:not-allowed;}
 .stage-track{display:flex;flex-direction:column;gap:8px;margin:8px 0;}
 .stage-row{display:flex;align-items:center;gap:8px;font-size:12px;font-weight:700;color:var(--text-soft);}
@@ -228,6 +229,7 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
 .approval-summary{font-size:12px;line-height:1.4;color:var(--text-muted);margin-top:7px;padding:8px;border-radius:8px;background:rgba(47,143,91,.07);}
 .approval-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px;}
 .approval-actions .fp-btn{margin-top:0;padding:8px 10px;font-size:12px;}
+.approval-actions .wide{grid-column:1 / -1;}
 
 .agent-alert-shell{
   position:absolute;left:50%;bottom:22px;z-index:70;display:flex;align-items:flex-end;justify-content:center;
@@ -284,8 +286,8 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
   padding:8px 0 0;cursor:pointer;
 }
 .dialogue-next:focus-visible{outline:2px solid rgba(47,143,91,.55);outline-offset:3px;border-radius:8px;}
-.agent-alert-actions{display:flex;gap:10px;max-width:390px;}
-.agent-alert-actions .fp-btn{width:auto;min-width:0;flex:1;}
+.agent-alert-actions{display:flex;flex-wrap:wrap;gap:10px;max-width:460px;}
+.agent-alert-actions .fp-btn{width:auto;min-width:130px;flex:1;margin-top:0;white-space:normal;line-height:1.15;}
 
 /* Three-dot "ARIA is working / receiving" indicator. Isolated, cheap CSS
    animation — no per-frame JS, so it never touches React state or the
@@ -401,7 +403,8 @@ html,body,#root{margin:0;padding:0;height:100%;width:100%;font-family:var(--font
   .agent-alert-copy{padding:0 20px 22px;text-align:center;}
   .agent-alert-copy h2{font-size:25px;}
   .dialogue-text{min-height:74px;max-height:26dvh;font-size:15px;text-align:left;}
-  .agent-alert-actions{margin:0 auto;width:100%;max-width:320px;}
+  .agent-alert-actions{margin:0 auto;width:100%;max-width:340px;}
+  .agent-alert-actions .fp-btn{min-width:100%;}
 }
 
 @media (max-width:420px){

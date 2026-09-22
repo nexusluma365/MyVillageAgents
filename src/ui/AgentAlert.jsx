@@ -20,6 +20,9 @@ export default function AgentAlert() {
   const openActivityPanel = useVillageStore((s) => s.openActivityPanel);
   const setActivityTab = useVillageStore((s) => s.setActivityTab);
   const retryTask = useVillageStore((s) => s.retryTask);
+  const pendingApprovals = useVillageStore((s) => s.pendingApprovals);
+  const decideApproval = useVillageStore((s) => s.decideApproval);
+  const requestApprovalDetails = useVillageStore((s) => s.requestApprovalDetails);
 
   if (!alert?.open || !alert.agentId) return null;
   const cfg = agents[alert.agentId]?.cfg;
@@ -29,6 +32,7 @@ export default function AgentAlert() {
   const sections = splitAriaMessageSections(message);
   const isFailure = alert.type === "error" || alert.type === "timed_out";
   const isApproval = alert.type === "waiting";
+  const approval = isApproval ? findAlertApproval(alert, pendingApprovals) : null;
   const primaryLabel = alert.type === "error"
     ? "Open Errors"
     : alert.type === "timed_out"
@@ -63,17 +67,27 @@ export default function AgentAlert() {
             finalActions={(
               <div className="agent-alert-actions">
                 {isFailure && alert.task && <button className="fp-btn" onClick={() => retryTask(alert.task)}>Retry</button>}
-                <button
-                  className="fp-btn"
-                  onClick={() => {
-                    closeAgentAlert();
-                    setActivityTab(alert.type === "error" || alert.type === "timed_out" ? "errors" : alert.type === "waiting" ? "approvals" : "completed");
-                    openActivityPanel();
-                  }}
-                >
-                  {isApproval ? "Review" : primaryLabel}
-                </button>
-                <button className="fp-btn ghost" onClick={closeAgentAlert}>{isApproval ? "Later" : "Done"}</button>
+                {approval ? (
+                  <>
+                    <button className="fp-btn" onClick={() => { closeAgentAlert(); decideApproval(approval.id, "approve"); }}>Approve</button>
+                    <button className="fp-btn ghost danger" onClick={() => { closeAgentAlert(); decideApproval(approval.id, "reject"); }}>Reject</button>
+                    <button className="fp-btn ghost" onClick={() => requestApprovalDetails(approval.id)}>Give Me More Details</button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="fp-btn"
+                      onClick={() => {
+                        closeAgentAlert();
+                        setActivityTab(alert.type === "error" || alert.type === "timed_out" ? "errors" : alert.type === "waiting" ? "approvals" : "completed");
+                        openActivityPanel();
+                      }}
+                    >
+                      {isApproval ? "Review" : primaryLabel}
+                    </button>
+                    <button className="fp-btn ghost" onClick={closeAgentAlert}>{isApproval ? "Later" : "Done"}</button>
+                  </>
+                )}
               </div>
             )}
           />
@@ -81,6 +95,15 @@ export default function AgentAlert() {
       </div>
     </div>
   );
+}
+
+function findAlertApproval(alert, approvals) {
+  const approvalId = alert.task?.approvalId || (alert.task?.id ? `approval-${alert.task.id}` : "");
+  if (approvalId) {
+    const exact = approvals.find((item) => item.id === approvalId && item.status === "pending");
+    if (exact) return exact;
+  }
+  return approvals.find((item) => item.status === "pending") || null;
 }
 
 function DialogueText({ sections, alertId, finalActions }) {
