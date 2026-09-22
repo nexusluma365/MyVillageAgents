@@ -107,6 +107,7 @@ export class AgentRuntime {
     this.idleTimer = null;
     this.waitingAlertedTaskIds = new Set();
     this.pendingTaskDone = null;
+    this.pendingVisualTaskDone = null;
     this.readyForTaskDone = false;
   }
 
@@ -333,10 +334,10 @@ export class AgentRuntime {
   }
 
   // ---- task lifecycle -----------------------------------------------
-  async assign(taskDef, params) {
+  assign(taskDef, params) {
     if (this.currentTask) {
       this.store.getState().pushToast(`${this.cfg.name} is already working. Please wait for this request to finish.`, "assigned");
-      return;
+      return null;
     }
     clearTimeout(this.idleTimer);
     releaseAgentReservations(this.id);
@@ -372,6 +373,39 @@ export class AgentRuntime {
     this.currentTask = task;
     this.store.getState().setAgentTask(this.id, task);
 
+    this.walkAssignedTaskToWork();
+    return task;
+  }
+
+  startVisualWork(task) {
+    if (!task || this.currentTask) return false;
+    clearTimeout(this.idleTimer);
+    releaseAgentReservations(this.id);
+    this.motion.interaction = null;
+    this.motion.moveToken++;
+    this.currentTask = task;
+    this.pendingTaskDone = null;
+    this.pendingVisualTaskDone = null;
+    this.readyForTaskDone = false;
+    this.store.getState().setAgentBubble(this.id, "!");
+    this.store.getState().setAgentStatus(this.id, "assigned");
+    this.store.getState().setBuildingGlow(this.id, false);
+    this.store.getState().setAgentTask(this.id, task);
+    this.walkAssignedTaskToWork();
+    return true;
+  }
+
+  finishVisualWork(task, success) {
+    if (!task?.id || !this.currentTask || this.currentTask.id !== task.id) return;
+    if (!this.readyForTaskDone) {
+      this.pendingVisualTaskDone = { task, success };
+      this.store.getState().setAgentTask(this.id, task);
+      return;
+    }
+    this.completeVisualWork(task, success);
+  }
+
+  async walkAssignedTaskToWork() {
     await wait(180 + Math.random() * 180);
     const work = WORK_INTERACTIONS[this.id] || { entranceNode: this.cfg.workNode, workNode: this.cfg.workNode, entranceYaw: 0, workYaw: 0 };
     const arrivedAtDoor = await this.moveTo(work.entranceNode, "walking_to_work");
@@ -384,12 +418,46 @@ export class AgentRuntime {
     this.motion.interaction = { type: "work", id: this.id };
     this.store.getState().setAgentStatus(this.id, "working");
     this.store.getState().setBuildingGlow(this.id, true);
+    this.store.getState().setAgentBubble(this.id, "");
     this.readyForTaskDone = true;
     if (this.pendingTaskDone) {
       const pending = this.pendingTaskDone;
       this.pendingTaskDone = null;
       setTimeout(() => this.handleTaskDoneEvent(pending.task, pending.success, pending.cleanup), 650);
     }
+    if (this.pendingVisualTaskDone) {
+      const pending = this.pendingVisualTaskDone;
+      this.pendingVisualTaskDone = null;
+      setTimeout(() => this.completeVisualWork(pending.task, pending.success), 650);
+    }
+  }
+
+  async completeVisualWork(task, success) {
+    this.readyForTaskDone = false;
+    this.pendingVisualTaskDone = null;
+    this.currentTask = task;
+    this.store.getState().setBuildingGlow(this.id, false);
+    this.store.getState().setAgentStatus(this.id, success ? "success" : "error");
+    this.store.getState().setAgentBubble(this.id, success ? "✅" : "⚠️");
+    this.store.getState().setAgentTask(this.id, task);
+    if (isSpecialist(this.id)) {
+      this.store.getState().setSpecialistLiveStatus(this.id, {
+        status: success ? "completed" : "waiting",
+        currentTask: null,
+        task: task.title,
+        lastResult: success ? (task.result || "Completed. Report sent to Aria.") : task.error,
+      });
+    }
+
+    await wait(1800);
+    if (!this.currentTask || this.currentTask.id !== task.id) return;
+    this.store.getState().setAgentBubble(this.id, "");
+    this.currentTask = null;
+    this.motion.interaction = null;
+    this.store.getState().setAgentTask(this.id, null);
+    await this.moveTo(AGENT_TERRITORIES[this.id]?.homeNode || this.cfg.yardNode, "returning");
+    this.store.getState().setAgentStatus(this.id, "idle");
+    this.scheduleIdle(600 + Math.random() * 1800);
   }
 
   isCurrentTask(task) {

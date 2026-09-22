@@ -152,7 +152,10 @@ export const useVillageStore = create((set, get) => ({
     const runParams = taskDef.id !== "process_rental_qualification"
       ? { ...params, context: buildAgentContextSnapshot(get().agents, get().specialistStatus) }
       : params;
-    runtime.assign(taskDef, runParams);
+    const task = runtime.assign(taskDef, runParams);
+    if (task && taskDef.delegates) {
+      get().startVisualDelegation(task, runParams);
+    }
     get().setProviderHealth("working");
     get().pushToast("Request sent to Aria.", "assigned");
   },
@@ -216,6 +219,7 @@ export const useVillageStore = create((set, get) => ({
     const sanitized = sanitizeTaskForSpecialistPanel({ ...task, agentId });
     if (isAria(agentId)) {
       get().setProviderHealth(success ? "connected" : "degraded");
+      get().finishVisualDelegation(task, success);
     }
     if (isSpecialist(agentId)) {
       set((s) => ({
@@ -286,6 +290,46 @@ export const useVillageStore = create((set, get) => ({
     }));
   },
 
+  startVisualDelegation: (ariaTask, params = {}) => {
+    const delegatedIds = specialistIdsFromRouteHint(params.specialist);
+    if (!ariaTask?.id || delegatedIds.length === 0) return;
+    delegatedIds.forEach((delegateId) => {
+      const runtime = runtimes[delegateId];
+      const agent = get().agents[delegateId];
+      if (!runtime || !agent || agent.currentTask) return;
+      const task = buildVisualDelegationTask(ariaTask, agent.cfg);
+      get().fireBeam(ARIA_AGENT_ID, delegateId);
+      get().setSpecialistLiveStatus(delegateId, {
+        status: "assigned",
+        currentTask: task.title,
+        task: task.title,
+        lastResult: "Aria handed this to me. Working now.",
+      });
+      runtime.startVisualWork(task);
+    });
+  },
+
+  finishVisualDelegation: (ariaTask, success) => {
+    if (!ariaTask?.id) return;
+    const delegatedIds = SPECIALIST_AGENT_IDS.filter((agentId) => {
+      const currentTask = get().agents[agentId]?.currentTask;
+      return currentTask?.sourceAriaTaskId === ariaTask.id;
+    });
+    delegatedIds.forEach((delegateId) => {
+      const runtime = runtimes[delegateId];
+      const currentTask = get().agents[delegateId]?.currentTask;
+      if (!runtime || !currentTask) return;
+      runtime.finishVisualWork({
+        ...currentTask,
+        status: success ? "completed" : "failed",
+        stage: success ? "Complete" : "Error",
+        completedAt: Date.now(),
+        result: success ? (ariaTask.resultMeta?.publicSummary || ariaTask.result || "Report sent back to Aria.") : null,
+        error: success ? null : (ariaTask.error || "Aria could not complete this delegated request."),
+      }, success);
+    });
+  },
+
   decideApproval: async (approvalId, decision) => {
     const approval = get().pendingApprovals.find((item) => item.id === approvalId);
     if (!approval || approval.status !== "pending") return;
@@ -339,6 +383,22 @@ export const useVillageStore = create((set, get) => ({
   openActivityPanel: () => set((s) => ({ activityPanel: { ...s.activityPanel, open: true } })),
   closeActivityPanel: () => set((s) => ({ activityPanel: { ...s.activityPanel, open: false } })),
   setActivityTab: (tab) => set((s) => ({ activityPanel: { ...s.activityPanel, tab } })),
+  clearActivityTab: (tab) => {
+    if (tab === "errors") {
+      HistoryStore.clear(["failed", "timed_out"]);
+      get().pushToast("Cleared old error activity.", "completed");
+      return;
+    }
+    if (tab === "completed") {
+      HistoryStore.clear(["completed"]);
+      get().pushToast("Cleared completed activity.", "completed");
+      return;
+    }
+    if (tab === "approvals") {
+      set({ pendingApprovals: [] });
+      get().pushToast("Cleared approval activity.", "completed");
+    }
+  },
 }));
 
 function loadHandledBusinessEventIds() {
@@ -399,5 +459,50 @@ function approvalFromAriaTask(task) {
     createdAt: Date.now(),
     decidedAt: null,
     decisionResult: null,
+  };
+}
+
+function specialistIdsFromRouteHint(specialist) {
+  const key = String(specialist || "auto").trim().toLowerCase();
+  if (!key || key === "auto") return [];
+  if (key === "all" || key === "team") return SPECIALIST_AGENT_IDS;
+  const map = {
+    milo: "content",
+    marketing: "content",
+    content: "content",
+    sage: "research",
+    conversion: "research",
+    research: "research",
+    forge: "automation",
+    website: "automation",
+    developer: "automation",
+    automation: "automation",
+    atlas: "manager",
+    listings: "manager",
+    manager: "manager",
+  };
+  return map[key] ? [map[key]] : [];
+}
+
+function buildVisualDelegationTask(ariaTask, specialistConfig) {
+  const now = Date.now();
+  return {
+    id: `aria-delegation-${ariaTask.id}-${specialistConfig.id}`,
+    agentId: specialistConfig.id,
+    sourceAriaTaskId: ariaTask.id,
+    requestId: ariaTask.requestId,
+    type: "aria_visual_delegation",
+    title: `${specialistConfig.role} Work`,
+    parameters: { delegatedBy: ARIA_AGENT_ID, sourceAriaTaskId: ariaTask.id },
+    status: "processing",
+    requestState: "working",
+    stage: "Working",
+    createdAt: now,
+    startedAt: now,
+    completedAt: null,
+    elapsedMs: null,
+    result: null,
+    resultMeta: null,
+    error: null,
   };
 }

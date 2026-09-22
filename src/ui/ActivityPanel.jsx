@@ -12,6 +12,7 @@ export default function ActivityPanel() {
   const openHistoryDetail = useVillageStore((s) => s.openHistoryDetail);
   const pendingApprovals = useVillageStore((s) => s.pendingApprovals);
   const decideApproval = useVillageStore((s) => s.decideApproval);
+  const clearActivityTab = useVillageStore((s) => s.clearActivityTab);
   const [, forceTick] = useState(0);
 
   // Active tab needs a light poll so elapsed-time / live tasks stay current,
@@ -29,12 +30,27 @@ export default function ActivityPanel() {
   const filtered = activityPanel.tab === "errors"
     ? history.filter((h) => h.status === "failed" || h.status === "timed_out")
     : history.filter((h) => h.status === "completed");
+  const canClear = activityPanel.tab === "approvals"
+    ? pendingApprovals.length > 0
+    : (activityPanel.tab === "completed" || activityPanel.tab === "errors") && filtered.length > 0;
+
+  function handleClear() {
+    clearActivityTab(activityPanel.tab);
+    forceTick((n) => n + 1);
+  }
 
   return (
     <div id="activity-panel" className={activityPanel.open ? "open" : ""}>
       <div className="ap-header">
         <h2>Activity</h2>
-        <button className="ap-close" onClick={closeActivityPanel} aria-label="Close activity panel">x</button>
+        <div className="ap-header-actions">
+          {canClear && (
+            <button className="ap-clear" onClick={handleClear} aria-label={`Clear ${activityPanel.tab} activity`}>
+              Clear
+            </button>
+          )}
+          <button className="ap-close" onClick={closeActivityPanel} aria-label="Close activity panel">x</button>
+        </div>
       </div>
       <div className="ap-tabs">
         {["active", "approvals", "completed", "errors"].map((tab) => (

@@ -18,4 +18,13 @@ export const HistoryStore = {
     this.save(list);
     return list;
   },
+  clear(statuses = null) {
+    if (!Array.isArray(statuses) || statuses.length === 0) {
+      try { localStorage.removeItem(this.KEY); } catch (e) {}
+      return [];
+    }
+    const keep = this.load().filter((record) => !statuses.includes(record.status));
+    this.save(keep);
+    return keep;
+  },
 };
